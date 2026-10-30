@@ -24,25 +24,30 @@ An AI-assisted desk lamp that shapes light with servo-driven filters<br>and clos
 ## Architecture
 
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"fontFamily": "-apple-system, Segoe UI, Helvetica, Arial, sans-serif", "fontSize": "14px", "background": "#0D1117", "primaryTextColor": "#E6EDF3", "textColor": "#C9D1D9", "lineColor": "#8B949E", "edgeLabelBackground": "#0D1117", "clusterBkg": "#161B22", "clusterBorder": "#30363D", "titleColor": "#E6EDF3"}, "flowchart": {"curve": "basis", "padding": 18, "nodeSpacing": 45, "rankSpacing": 55}}}%%
 flowchart TB
-  subgraph NODE["Sensor Node · ESP32 A"]
-    S["BH1750 + TCS34725<br/>lux · colour temp"]
-  end
+  subgraph SYS["SmartDeskLight · System Architecture"]
+    direction TB
 
-  subgraph GW["Gateway · ESP32 B · FreeRTOS"]
-    G1["VL53L0X · PIR · INA219"]
-    G2["Control loop"]
-    G3["Cloud task<br/>offline buffer"]
-  end
+    subgraph NODE["SENSOR NODE · ESP32 A"]
+      S["BH1750 + TCS34725<br/>lux · colour temp"]
+    end
 
-  subgraph LAMP["Lamp"]
-    L["3 servo filters<br/>+ LED PWM"]
-  end
+    subgraph GW["GATEWAY · ESP32 B · FreeRTOS"]
+      G1["VL53L0X · PIR · INA219"]
+      G2["Control loop"]
+      G3["Cloud task<br/>offline buffer"]
+    end
 
-  subgraph CLOUD["Cloud & Services"]
-    N[("NETPIE2020<br/>Feed · Dashboard")]
-    A{{"LLM API"}}
-    D["Discord"]
+    subgraph LAMP["LAMP"]
+      L["3 servo filters<br/>+ LED PWM"]
+    end
+
+    subgraph CLOUD["CLOUD & SERVICES"]
+      N[("NETPIE2020<br/>Feed · Dashboard")]
+      A{{"LLM API"}}
+      D["Discord"]
+    end
   end
 
   S -->|"ESP-NOW · ACK"| G2
@@ -54,21 +59,25 @@ flowchart TB
   G3 <-->|"HTTPS"| A
   G3 -->|"webhook"| D
 
-  classDef sense fill:#E8F1FB,stroke:#2F6FEB,stroke-width:1.5px,color:#0F172A
-  classDef edge fill:#FFF3D6,stroke:#D97706,stroke-width:1.5px,color:#0F172A
-  classDef act fill:#FDE2E2,stroke:#DC2626,stroke-width:1.5px,color:#0F172A
-  classDef cloud fill:#DCFCE7,stroke:#16A34A,stroke-width:1.5px,color:#0F172A
-  classDef ai fill:#EDE4FD,stroke:#7C3AED,stroke-width:1.5px,color:#0F172A
+  classDef sense fill:#0F2747,stroke:#58A6FF,stroke-width:2px,color:#E6EDF3
+  classDef edge fill:#3A2A0B,stroke:#F0A93B,stroke-width:2px,color:#E6EDF3
+  classDef act fill:#3B1414,stroke:#FF6B6B,stroke-width:2px,color:#E6EDF3
+  classDef cloud fill:#0E2E1C,stroke:#3FB950,stroke-width:2px,color:#E6EDF3
+  classDef ai fill:#2A1A4A,stroke:#BC8CFF,stroke-width:2px,color:#E6EDF3
   class S sense
   class G1,G2,G3 edge
   class L act
   class N,D cloud
   class A ai
-  style NODE fill:#F5F8FF,stroke:#BFD3FB,color:#1E3A8A
-  style GW fill:#FFFAF0,stroke:#F5D199,color:#7C2D12
-  style LAMP fill:#FFF5F5,stroke:#F8B4B4,color:#7F1D1D
-  style CLOUD fill:#F2FBF5,stroke:#A7E3BC,color:#14532D
-  linkStyle 3 stroke:#DC2626,stroke-width:2px
+
+  style SYS fill:#0D1117,stroke:#30363D,stroke-width:1px,color:#E6EDF3
+  style NODE fill:#161B22,stroke:#1F6FEB,stroke-width:1.5px,color:#79C0FF
+  style GW fill:#161B22,stroke:#9E6A03,stroke-width:1.5px,color:#F0A93B
+  style LAMP fill:#161B22,stroke:#B62324,stroke-width:1.5px,color:#FF7B72
+  style CLOUD fill:#161B22,stroke:#238636,stroke-width:1.5px,color:#56D364
+
+  linkStyle default stroke:#8B949E,stroke-width:1.5px,color:#C9D1D9
+  linkStyle 3 stroke:#FF6B6B,stroke-width:2px
 ```
 
 <sub>Detailed diagram with FreeRTOS tasks and E-items: [`docs/architecture.png`](docs/architecture.png)</sub>
