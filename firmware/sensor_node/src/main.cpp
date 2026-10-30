@@ -12,7 +12,12 @@ static uint8_t GATEWAY_MAC[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};  // TODO: 
 static volatile uint32_t lastAckedSeq = 0;
 static uint32_t seq = 0;
 
+// Arduino-ESP32 3.x (ESP-IDF 5) changed the ESP-NOW receive callback signature
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+static void onRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
+#else
 static void onRecv(const uint8_t *mac, const uint8_t *data, int len) {
+#endif
   if (len == sizeof(SdlAck)) {
     const SdlAck *ack = (const SdlAck *)data;
     if (ack->type == SDL_MSG_ACK && ack->node_id == NODE_ID) lastAckedSeq = ack->seq;
