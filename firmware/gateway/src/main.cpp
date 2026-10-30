@@ -18,8 +18,19 @@ static QueueHandle_t qEvents;     // ISR / tasks -> Control
 enum EventType : uint8_t { EVT_STOP_BUTTON = 1, EVT_NEW_PROFILE = 2 };
 
 // ---- ESP-NOW receive callback: just queue + ACK, no heavy work here ----
+// Arduino-ESP32 3.x (ESP-IDF 5) changed the ESP-NOW receive callback signature
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+static void onRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
+  const uint8_t *mac = info->src_addr;
+#else
 static void onRecv(const uint8_t *mac, const uint8_t *data, int len) {
+#endif
   if (len != sizeof(SdlTelemetry)) return;
+  if (!esp_now_is_peer_exist(mac)) {  // ACK needs the node registered as a peer
+    esp_now_peer_info_t peer = {};
+    memcpy(peer.peer_addr, mac, 6);
+    esp_now_add_peer(&peer);
+  }
   SdlTelemetry pkt;
   memcpy(&pkt, data, sizeof(pkt));
   SdlAck ack = {SDL_PROTO_VERSION, SDL_MSG_ACK, pkt.node_id, pkt.seq};
