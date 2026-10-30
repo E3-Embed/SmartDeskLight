@@ -26,21 +26,21 @@ An AI-assisted desk lamp that shapes light with servo-driven filters<br>and clos
 ```mermaid
 flowchart TB
   subgraph NODE["Sensor Node · ESP32 A"]
-    S["BH1750 + TCS34725<br/><small>desk lux · colour temp</small>"]
+    S["BH1750 + TCS34725<br/>lux · colour temp"]
   end
 
   subgraph GW["Gateway · ESP32 B · FreeRTOS"]
-    G1["VL53L0X · PIR · INA219<br/><small>distance · presence · power</small>"]
-    G2["Control loop<br/><small>target vs measured</small>"]
-    G3["Cloud task<br/><small>store-and-forward</small>"]
+    G1["VL53L0X · PIR · INA219"]
+    G2["Control loop"]
+    G3["Cloud task<br/>offline buffer"]
   end
 
   subgraph LAMP["Lamp"]
-    L["3× servo filters + LED PWM<br/><small>diffuser · ND · warm</small>"]
+    L["3 servo filters<br/>+ LED PWM"]
   end
 
   subgraph CLOUD["Cloud & Services"]
-    N[("NETPIE2020<br/><small>Shadow · Feed · Dashboard</small>")]
+    N[("NETPIE2020<br/>Feed · Dashboard")]
     A{{"LLM API"}}
     D["Discord"]
   end
