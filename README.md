@@ -162,7 +162,7 @@ ISRs and the ESP-NOW callback only enqueue work; everything else happens in task
 | **E2** Interrupt-driven I/O | Stop button ISR → `xQueueSendFromISR` → `ControlTask` | 🟡 scaffolded |
 | **E4** Reliable communication | seq + ACK/retry node ↔ gateway, ring buffer while offline | 🟡 scaffolded |
 | **E5** Security | MQTTS with CA check + device token, HTTPS to AI/Discord, secrets git-ignored | ⚪ planned |
-| **E8** Low-level driver | Own register-level I²C drivers for BH1750 and INA219 | ⚪ planned |
+| **E8** Low-level driver | Own register-level I²C drivers for BH1750, TCS34725 and INA219 | ⚪ planned |
 
 ### Safety
 
@@ -263,7 +263,7 @@ As required by Section 4.6 of the course brief:
 
 ## Acknowledgements
 
-[PubSubClient](https://github.com/knolleary/pubsubclient) · [ArduinoJson](https://arduinojson.org/) · [ESP32Servo](https://github.com/madhephaestus/ESP32Servo) · [Pololu VL53L0X](https://github.com/pololu/vl53l0x-arduino) · [Adafruit TCS34725](https://github.com/adafruit/Adafruit_TCS34725) · [NETPIE2020](https://netpie.io)
+[PubSubClient](https://github.com/knolleary/pubsubclient) · [ArduinoJson](https://arduinojson.org/) · [ESP32Servo](https://github.com/madhephaestus/ESP32Servo) · [Pololu VL53L0X](https://github.com/pololu/vl53l0x-arduino) · [NETPIE2020](https://netpie.io)
 
 ## License
 
