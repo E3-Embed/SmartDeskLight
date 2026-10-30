@@ -146,13 +146,13 @@ Planned metrics (each repeated ≥ 10×, reported as mean / min / max): BH1750 a
 
 ## Team
 
-| Member | Student ID | Role |
-|---|---|---|
-| TBD | | System Architect & Integration |
-| TBD | | Embedded Developer (Sensor Node) |
-| Narinthon Yangngam | 6833136121 | Embedded Developer (Gateway & Cloud) |
-| TBD | | UI/UX & Dashboard Developer |
-| TBD | | Project Manager & Test Lead |
+| Member | Student ID | Role | Main work |
+|---|---|---|---|
+| รชาทัช บุญพัฒน์ | 6833230421 | System Architect & Integration | Message format, system integration, AI integration |
+| ฐากูร นันตสุวรรณ | 6833060021 | Embedded Developer (Sensor Node) | Node firmware, BH1750 driver, ESP-NOW ACK |
+| นรินธร ยางงาม | 6833136121 | Embedded Developer (Gateway & Cloud) | FreeRTOS, servo/PWM, NETPIE MQTTS, INA219 |
+| ปุณยวีร์ พัฒนประดิษฐ์ | 6833170421 | UI/UX & Dashboard Developer | Dashboard, feedback UI, Discord alerts |
+| กษิดิศ ประจงการ | 6833008521 | Project Manager & Test Lead | Timeline, test plan, metrics, filter mechanism |
 
 ## AI tools declaration
 
