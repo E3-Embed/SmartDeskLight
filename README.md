@@ -1,6 +1,6 @@
 <div align="center">
 
-# 💡 SmartDeskLight
+# SmartDeskLight
 
 ### Light that adapts to how you work
 
@@ -15,15 +15,63 @@ An AI-assisted desk lamp that shapes light with servo-driven filters<br>and clos
 ![NETPIE2020](https://img.shields.io/badge/cloud-NETPIE2020-16A34A)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**[How it works](#how-it-works)** · **[Quick start](#quick-start)** · **[Docs](#documentation)** · **[Team](#team)**
+**[Architecture](#architecture)** · **[How it works](#how-it-works)** · **[Quick start](#quick-start)** · **[Docs](#documentation)** · **[Team](#team)**
 
 </div>
 
 <br>
 
-<p align="center">
-  <img src="docs/architecture.png" alt="SmartDeskLight system architecture" width="100%">
-</p>
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph NODE["Sensor Node · ESP32 A"]
+    S["BH1750 + TCS34725<br/><small>desk lux · colour temp</small>"]
+  end
+
+  subgraph GW["Gateway · ESP32 B · FreeRTOS"]
+    G1["VL53L0X · PIR · INA219<br/><small>distance · presence · power</small>"]
+    G2["Control loop<br/><small>target vs measured</small>"]
+    G3["Cloud task<br/><small>store-and-forward</small>"]
+  end
+
+  subgraph LAMP["Lamp"]
+    L["3× servo filters + LED PWM<br/><small>diffuser · ND · warm</small>"]
+  end
+
+  subgraph CLOUD["Cloud & Services"]
+    N[("NETPIE2020<br/><small>Shadow · Feed · Dashboard</small>")]
+    A{{"LLM API"}}
+    D["Discord"]
+  end
+
+  S -->|"ESP-NOW · ACK"| G2
+  G1 --> G2
+  G2 -->|"servo · PWM"| L
+  L -.->|"measured light"| S
+  G2 <--> G3
+  G3 <-->|"MQTTS"| N
+  G3 <-->|"HTTPS"| A
+  G3 -->|"webhook"| D
+
+  classDef sense fill:#E8F1FB,stroke:#2F6FEB,stroke-width:1.5px,color:#0F172A
+  classDef edge fill:#FFF3D6,stroke:#D97706,stroke-width:1.5px,color:#0F172A
+  classDef act fill:#FDE2E2,stroke:#DC2626,stroke-width:1.5px,color:#0F172A
+  classDef cloud fill:#DCFCE7,stroke:#16A34A,stroke-width:1.5px,color:#0F172A
+  classDef ai fill:#EDE4FD,stroke:#7C3AED,stroke-width:1.5px,color:#0F172A
+  class S sense
+  class G1,G2,G3 edge
+  class L act
+  class N,D cloud
+  class A ai
+  style NODE fill:#F5F8FF,stroke:#BFD3FB,color:#1E3A8A
+  style GW fill:#FFFAF0,stroke:#F5D199,color:#7C2D12
+  style LAMP fill:#FFF5F5,stroke:#F8B4B4,color:#7F1D1D
+  style CLOUD fill:#F2FBF5,stroke:#A7E3BC,color:#14532D
+  linkStyle 3 stroke:#DC2626,stroke-width:2px
+```
+
+<sub>Detailed diagram with FreeRTOS tasks and E-items: [`docs/architecture.png`](docs/architecture.png)</sub>
 
 ## Highlights
 
@@ -56,12 +104,12 @@ Requires [PlatformIO](https://platformio.org/), two ESP32 boards and a NETPIE202
 
 | | |
 |---|---|
-| 🔌 [Hardware](docs/hardware.md) | Bill of materials, pin map, power and safety |
-| 📡 [Protocols](docs/protocols.md) | ESP-NOW packet, NETPIE topics, AI request / response |
-| ⚙️ [Firmware](docs/firmware.md) | FreeRTOS tasks and Embedded Engineering Depth items |
-| 🧪 [Testing](docs/testing.md) | Metrics, method and results |
-| 📊 [Dashboard](dashboard/README.md) | NETPIE2020 device, dashboard and alerts setup |
-| 🤝 [Contributing](CONTRIBUTING.md) | Branches, commit style, secrets policy |
+| [Hardware](docs/hardware.md) | Bill of materials, pin map, power and safety |
+| [Protocols](docs/protocols.md) | ESP-NOW packet, NETPIE topics, AI request / response |
+| [Firmware](docs/firmware.md) | FreeRTOS tasks and Embedded Engineering Depth items |
+| [Testing](docs/testing.md) | Metrics, method and results |
+| [Dashboard](dashboard/README.md) | NETPIE2020 device, dashboard and alerts setup |
+| [Contributing](CONTRIBUTING.md) | Branches, commit style, secrets policy |
 
 ## Team
 
