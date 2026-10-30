@@ -1,0 +1,43 @@
+name: Firmware build
+
+on:
+  push:
+    branches: [main]
+    paths: ['firmware/**', '.github/workflows/build.yml']
+  pull_request:
+    paths: ['firmware/**', '.github/workflows/build.yml']
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build ${{ matrix.project }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [sensor_node, gateway]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+            ~/.platformio/packages
+            ~/.platformio/platforms
+          key: pio-${{ runner.os }}-${{ hashFiles('firmware/**/platformio.ini') }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Use placeholder secrets (CI only)
+        if: matrix.project == 'gateway'
+        run: cp firmware/gateway/include/secrets.example.h firmware/gateway/include/secrets.h
+
+      - name: Build
+        run: pio run -d firmware/${{ matrix.project }}
