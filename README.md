@@ -1,5 +1,12 @@
 # SmartDeskLight
 
+[![Firmware build](https://github.com/E3-Embed/SmartDeskLight/actions/workflows/build.yml/badge.svg)](https://github.com/E3-Embed/SmartDeskLight/actions/workflows/build.yml)
+![ESP32](https://img.shields.io/badge/MCU-ESP32-E7352C?logo=espressif&logoColor=white)
+![PlatformIO](https://img.shields.io/badge/build-PlatformIO-F5822A?logo=platformio&logoColor=white)
+![FreeRTOS](https://img.shields.io/badge/RTOS-FreeRTOS-4CAF50)
+![NETPIE2020](https://img.shields.io/badge/cloud-NETPIE2020-16A34A)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 AI-assisted adaptive desk lighting for visual comfort — Embedded System (CEDT) Final Project 2026.
 
 Students who switch between reading on paper and working on a screen get light on their desk that changes all day (window light, ceiling lamps, time of day). SmartDeskLight is a low-voltage LED desk lamp with **three servo-driven flip filters** (diffuser, ND, warm/CTO) plus PWM fine-tuning. Sensors measure the light that actually reaches the desk and the user's context; an LLM suggests a lighting profile, and the gateway closes the loop on the measured lux.
@@ -9,6 +16,10 @@ Students who switch between reading on paper and working on a screen get light o
 ![System architecture](docs/architecture.png)
 
 <sub>Editable source: [`docs/architecture.svg`](docs/architecture.svg)</sub>
+
+## Contents
+
+[Features](#features) · [Hardware](#hardware) · [Message formats](#message-formats) · [Firmware design](#firmware-design) · [Safety](#safety) · [Getting started](#getting-started) · [Testing](#testing) · [Milestones](#milestones) · [Team](#team) · [Contributing](#contributing)
 
 ## Features
 
@@ -163,6 +174,14 @@ Planned metrics (each repeated ≥ 10×, reported as mean / min / max): BH1750 a
 
 Add any further tools and the parts they were used for (Section 4.6).
 
+## Contributing
+
+Work on a branch, open a pull request and get one review before merging. Branch names, commit message format, code style and the secrets policy are in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Credits
 
 Libraries: [PubSubClient](https://github.com/knolleary/pubsubclient), [ArduinoJson](https://arduinojson.org/), [ESP32Servo](https://github.com/madhephaestus/ESP32Servo), [Pololu VL53L0X](https://github.com/pololu/vl53l0x-arduino), [Adafruit TCS34725](https://github.com/adafruit/Adafruit_TCS34725). BH1750 and INA219 drivers are our own (E8).
+
+## License
+
+[MIT](LICENSE) © 2026 SmartDeskLight team
