@@ -1,6 +1,6 @@
 <div align="center">
 
-# SmartDeskLight
+# 💡 SmartDeskLight
 
 ### Light that adapts to how you work
 
