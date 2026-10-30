@@ -24,7 +24,7 @@ An AI-assisted desk lamp that shapes light with servo-driven filters<br>and clos
 ## Architecture
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"fontFamily": "-apple-system, Segoe UI, Helvetica, Arial, sans-serif", "fontSize": "14px", "background": "#0D1117", "primaryTextColor": "#E6EDF3", "textColor": "#C9D1D9", "lineColor": "#8B949E", "edgeLabelBackground": "#0D1117", "clusterBkg": "#161B22", "clusterBorder": "#30363D", "titleColor": "#E6EDF3"}, "flowchart": {"curve": "basis", "padding": 18, "nodeSpacing": 45, "rankSpacing": 55}}}%%
+%%{init: {"theme": "base", "themeVariables": {"background": "#0D1117", "primaryTextColor": "#E6EDF3", "textColor": "#C9D1D9", "lineColor": "#8B949E", "edgeLabelBackground": "#0D1117", "clusterBkg": "#161B22", "clusterBorder": "#30363D", "titleColor": "#E6EDF3"}, "flowchart": {"curve": "basis", "padding": 18, "nodeSpacing": 45, "rankSpacing": 55}}}%%
 flowchart TB
   subgraph SYS["SmartDeskLight · System Architecture"]
     direction TB
