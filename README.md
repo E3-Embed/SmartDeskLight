@@ -24,7 +24,7 @@ An AI-assisted desk lamp that shapes light with servo-driven filters<br>and clos
 ## Architecture
 
 ```mermaid
-flowchart LR
+flowchart TB
   subgraph NODE["Sensor Node · ESP32 A"]
     S["BH1750 + TCS34725<br/><small>desk lux · colour temp</small>"]
   end
