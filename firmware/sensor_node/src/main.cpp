@@ -2,8 +2,7 @@
 // Reads BH1750 + TCS34725, sends SdlTelemetry to the gateway over ESP-NOW,
 // waits for ACK and retries (E4).
 #include <Arduino.h>
-#include <SPI.h>   // pulled in explicitly: Adafruit BusIO (TCS34725 dependency) needs it
-#include <Wire.h>
+#include <Wire.h>    // I2C for BH1750 + TCS34725 (own drivers, E8)
 #include <WiFi.h>
 #include <esp_now.h>
 #include "message.h"
