@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="920" viewBox="0 0 1600 920" font-family='Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif'>
+<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#334155"/></marker><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#DC2626"/></marker><filter id="sh" x="-5%" y="-5%" width="110%" height="120%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0F172A" flood-opacity="0.10"/></filter></defs><rect width="1600" height="920" fill="#F8FAFC"/>
+<text x="48" y="60" font-size="30" font-weight="700" fill="#0F172A">SmartDeskLight — System Architecture</text><text x="48" y="90" font-size="16" fill="#64748B">AI-assisted adaptive desk lighting · Embedded System (CEDT) Final Project 2026</text>
+<rect x="40" y="115" width="400" height="580" rx="22" fill="#EEF4FF" stroke="#D6E4FF" stroke-width="1.5"/>
+<text x="64" y="147" font-size="13" font-weight="700" letter-spacing="2" fill="#2F5BBF">SENSOR NODES</text>
+<rect x="480" y="115" width="560" height="730" rx="22" fill="#FFF7EB" stroke="#FBE3BF" stroke-width="1.5"/>
+<text x="504" y="147" font-size="13" font-weight="700" letter-spacing="2" fill="#B45309">EDGE — GATEWAY &amp; LAMP</text>
+<rect x="1080" y="115" width="480" height="730" rx="22" fill="#EDF9F1" stroke="#C9EED6" stroke-width="1.5"/>
+<text x="1104" y="147" font-size="13" font-weight="700" letter-spacing="2" fill="#15803D">CLOUD &amp; SERVICES</text>
+<g filter="url(#sh)"><rect x="64" y="165" width="352" height="205" rx="14" fill="#FFFFFF" stroke="#2F6FEB" stroke-width="1.6"/></g>
+<path d="M64 179 a14 14 0 0 1 14 -14 h324 a14 14 0 0 1 14 14 v30 h-352 z" fill="#2F6FEB"/>
+<text x="82" y="194" font-size="16" font-weight="700" fill="#FFFFFF">Sensor Node 1 · ESP32 A</text>
+<rect x="84" y="225" width="150" height="60" rx="10" fill="#EEF4FF" stroke="#BFD3FB" stroke-width="1.2"/>
+<text x="159" y="252" text-anchor="middle" font-size="14" font-weight="700" fill="#0F172A">BH1750</text>
+<text x="159" y="270" text-anchor="middle" font-size="12" fill="#475569">ambient light (lux)</text>
+<rect x="246" y="225" width="150" height="60" rx="10" fill="#EEF4FF" stroke="#BFD3FB" stroke-width="1.2"/>
+<text x="321" y="252" text-anchor="middle" font-size="14" font-weight="700" fill="#0F172A">TCS34725</text>
+<text x="321" y="270" text-anchor="middle" font-size="12" fill="#475569">RGB · colour temp</text>
+<text x="84" y="312" font-size="13" fill="#334155" font-weight="600" text-anchor="start">Own register-level I²C driver (E8)</text>
+<text x="84" y="334" font-size="12.5" fill="#64748B" font-weight="400" text-anchor="start">Packet: node_id · seq · ts · lux · RGBC · CCT</text>
+<text x="84" y="354" font-size="12.5" fill="#64748B" font-weight="400" text-anchor="start">Retries up to 3× if no ACK within 100 ms</text>
+<g filter="url(#sh)"><rect x="64" y="395" width="352" height="120" rx="14" fill="#FFFFFF" stroke="#2F6FEB" stroke-width="1.6" stroke-dasharray="7 5"/></g>
+<path d="M64 409 a14 14 0 0 1 14 -14 h324 a14 14 0 0 1 14 14 v30 h-352 z" fill="#DCE7FD"/>
+<text x="82" y="424" font-size="16" font-weight="700" fill="#1E3A8A">Sensor Node 2 · physical</text>
+<text x="84" y="470" font-size="13" fill="#334155" font-weight="400" text-anchor="start">Same sensors on a second desk</text>
+<text x="84" y="492" font-size="12.5" fill="#64748B" font-weight="400" text-anchor="start">Target: 2 physical nodes at the same time</text>
+<g filter="url(#sh)"><rect x="64" y="540" width="352" height="120" rx="14" fill="#FFFFFF" stroke="#2F6FEB" stroke-width="1.6" stroke-dasharray="7 5"/></g>
+<path d="M64 554 a14 14 0 0 1 14 -14 h324 a14 14 0 0 1 14 14 v30 h-352 z" fill="#DCE7FD"/>
+<text x="82" y="569" font-size="16" font-weight="700" fill="#1E3A8A">Simulated nodes · N101+</text>
+<text x="84" y="615" font-size="13" fill="#334155" font-weight="400" text-anchor="start">Scalability test on the gateway</text>
+<text x="84" y="637" font-size="12.5" fill="#64748B" font-weight="400" text-anchor="start">Routed and shown per node_id on the dashboard</text>
+<g filter="url(#sh)"><rect x="504" y="165" width="512" height="415" rx="14" fill="#FFFFFF" stroke="#D97706" stroke-width="1.6"/></g>
+<path d="M504 179 a14 14 0 0 1 14 -14 h484 a14 14 0 0 1 14 14 v30 h-512 z" fill="#D97706"/>
+<text x="522" y="194" font-size="16" font-weight="700" fill="#FFFFFF">Gateway · ESP32 B · FreeRTOS</text>
+<text x="526" y="237" font-size="11.5" fill="#B45309" font-weight="700" text-anchor="start">LOCAL SENSORS</text>
+<rect x="526" y="247" width="150" height="58" rx="10" fill="#FFF7EB" stroke="#F5D199" stroke-width="1.2"/>
+<text x="601" y="273" text-anchor="middle" font-size="14" font-weight="700" fill="#0F172A">VL53L0X</text>
+<text x="601" y="291" text-anchor="middle" font-size="12" fill="#475569">user distance</text>
+<rect x="688" y="247" width="150" height="58" rx="10" fill="#FFF7EB" stroke="#F5D199" stroke-width="1.2"/>
+<text x="763" y="273" text-anchor="middle" font-size="14" font-weight="700" fill="#0F172A">PIR</text>
+<text x="763" y="291" text-anchor="middle" font-size="12" fill="#475569">desk presence</text>
+<rect x="850" y="247" width="144" height="58" rx="10" fill="#FFF7EB" stroke="#F5D199" stroke-width="1.2"/>
+<text x="922" y="273" text-anchor="middle" font-size="14" font-weight="700" fill="#0F172A">INA219</text>
+<text x="922" y="291" text-anchor="middle" font-size="12" fill="#475569">lamp V · I · P</text>
+<text x="526" y="336" font-size="11.5" fill="#B45309" font-weight="700" text-anchor="start">TASKS · PRIORITY (E1)</text>
+<rect x="526" y="346" width="228" height="40" rx="10" fill="#FDECD3" stroke="#F5C27A" stroke-width="1.2"/>
+<text x="640" y="371" text-anchor="middle" font-size="13.5" font-weight="600" fill="#7C2D12">ControlTask · P4</text>
+<rect x="766" y="346" width="228" height="40" rx="10" fill="#FDECD3" stroke="#F5C27A" stroke-width="1.2"/>
+<text x="880" y="371" text-anchor="middle" font-size="13.5" font-weight="600" fill="#7C2D12">EspNowRxTask · P3</text>
+<rect x="526" y="394" width="228" height="40" rx="10" fill="#FDECD3" stroke="#F5C27A" stroke-width="1.2"/>
+<text x="640" y="419" text-anchor="middle" font-size="13.5" font-weight="600" fill="#7C2D12">SensorTask · P2</text>
+<rect x="766" y="394" width="228" height="40" rx="10" fill="#FDECD3" stroke="#F5C27A" stroke-width="1.2"/>
+<text x="880" y="419" text-anchor="middle" font-size="13.5" font-weight="600" fill="#7C2D12">CloudTask · P1</text>
+<rect x="526" y="452" width="228" height="58" rx="10" fill="#FFFFFF" stroke="#F5C27A" stroke-width="1.2"/>
+<text x="640" y="478" text-anchor="middle" font-size="14" font-weight="700" fill="#0F172A">Stop button</text>
+<text x="640" y="496" text-anchor="middle" font-size="12" fill="#475569">GPIO ISR → queue (E2)</text>
+<rect x="766" y="452" width="228" height="58" rx="10" fill="#FFFFFF" stroke="#F5C27A" stroke-width="1.2"/>
+<text x="880" y="478" text-anchor="middle" font-size="14" font-weight="700" fill="#0F172A">Ring buffer</text>
+<text x="880" y="496" text-anchor="middle" font-size="12" fill="#475569">store-and-forward (E4)</text>
+<text x="526" y="540" font-size="13" fill="#334155" font-weight="600" text-anchor="start">Real-time loop: measured lux vs target → filters + PWM</text>
+<text x="526" y="561" font-size="12.5" fill="#64748B" font-weight="400" text-anchor="start">Safe state on sensor / network fault · timeout on every move</text>
+<g filter="url(#sh)"><rect x="504" y="640" width="512" height="180" rx="14" fill="#FFFFFF" stroke="#DC2626" stroke-width="1.6"/></g>
+<path d="M504 654 a14 14 0 0 1 14 -14 h484 a14 14 0 0 1 14 14 v30 h-512 z" fill="#DC2626"/>
+<text x="522" y="669" font-size="16" font-weight="700" fill="#FFFFFF">Lamp module · actuation</text>
+<rect x="526" y="700" width="150" height="60" rx="10" fill="#FEF2F2" stroke="#F8B4B4" stroke-width="1.2"/>
+<text x="601" y="727" text-anchor="middle" font-size="14" font-weight="700" fill="#0F172A">Diffuser</text>
+<text x="601" y="745" text-anchor="middle" font-size="12" fill="#475569">Servo 1 · glare</text>
+<rect x="688" y="700" width="150" height="60" rx="10" fill="#FEF2F2" stroke="#F8B4B4" stroke-width="1.2"/>
+<text x="763" y="727" text-anchor="middle" font-size="14" font-weight="700" fill="#0F172A">ND film</text>
+<text x="763" y="745" text-anchor="middle" font-size="12" fill="#475569">Servo 2 · dimming</text>
+<rect x="850" y="700" width="144" height="60" rx="10" fill="#FEF2F2" stroke="#F8B4B4" stroke-width="1.2"/>
+<text x="922" y="727" text-anchor="middle" font-size="14" font-weight="700" fill="#0F172A">Warm / CTO</text>
+<text x="922" y="745" text-anchor="middle" font-size="12" fill="#475569">Servo 3 · less blue</text>
+<text x="526" y="790" font-size="12.5" fill="#64748B" font-weight="400" text-anchor="start">Low-voltage LED + driver (PWM fine-tune) · mechanical end stops</text>
+<g filter="url(#sh)"><rect x="1104" y="165" width="432" height="240" rx="14" fill="#FFFFFF" stroke="#16A34A" stroke-width="1.6"/></g>
+<path d="M1104 179 a14 14 0 0 1 14 -14 h404 a14 14 0 0 1 14 14 v30 h-432 z" fill="#16A34A"/>
+<text x="1122" y="194" font-size="16" font-weight="700" fill="#FFFFFF">NETPIE2020 · IoT platform</text>
+<rect x="1122" y="220" width="92" height="24" rx="12" fill="#DCFCE7"/>
+<text x="1168" y="237" font-size="12.5" fill="#166534" font-weight="700" text-anchor="middle">MQTTS</text>
+<text x="1226" y="237" font-size="13" fill="#334155" font-weight="400" text-anchor="start">mqtt.netpie.io:1884 · Client ID + Token</text>
+<rect x="1122" y="253" width="92" height="24" rx="12" fill="#DCFCE7"/>
+<text x="1168" y="270" font-size="12.5" fill="#166534" font-weight="700" text-anchor="middle">Shadow</text>
+<text x="1226" y="270" font-size="13" fill="#334155" font-weight="400" text-anchor="start">per-node state (n1_lux, n2_lux …)</text>
+<rect x="1122" y="286" width="92" height="24" rx="12" fill="#DCFCE7"/>
+<text x="1168" y="303" font-size="12.5" fill="#166534" font-weight="700" text-anchor="middle">Feed</text>
+<text x="1226" y="303" font-size="13" fill="#334155" font-weight="400" text-anchor="start">raw time series · CSV export</text>
+<rect x="1122" y="319" width="92" height="24" rx="12" fill="#DCFCE7"/>
+<text x="1168" y="336" font-size="12.5" fill="#166534" font-weight="700" text-anchor="middle">Dashboard</text>
+<text x="1226" y="336" font-size="13" fill="#334155" font-weight="400" text-anchor="start">charts · filter state · feedback buttons</text>
+<rect x="1122" y="352" width="92" height="24" rx="12" fill="#DCFCE7"/>
+<text x="1168" y="369" font-size="12.5" fill="#166534" font-weight="700" text-anchor="middle">Trigger</text>
+<text x="1226" y="369" font-size="13" fill="#334155" font-weight="400" text-anchor="start">device offline → alert</text>
+<g filter="url(#sh)"><rect x="1104" y="440" width="432" height="165" rx="14" fill="#FFFFFF" stroke="#7C3AED" stroke-width="1.6"/></g>
+<path d="M1104 454 a14 14 0 0 1 14 -14 h404 a14 14 0 0 1 14 14 v30 h-432 z" fill="#7C3AED"/>
+<text x="1122" y="469" font-size="16" font-weight="700" fill="#FFFFFF">AI service · LLM API</text>
+<text x="1124" y="507" font-size="13" fill="#334155" font-weight="400" text-anchor="start">In: lux · CCT · distance · presence · activity</text>
+<text x="1124" y="529" font-size="13" fill="#334155" font-weight="400" text-anchor="start">      + user feedback history</text>
+<text x="1124" y="556" font-size="13" fill="#334155" font-weight="600" text-anchor="start">Out: JSON { target_lux, target_cct, filters[3] }</text>
+<text x="1124" y="583" font-size="12.5" fill="#64748B" font-weight="400" text-anchor="start">Gateway clamps the range and rate-limits servo moves</text>
+<g filter="url(#sh)"><rect x="1104" y="640" width="432" height="120" rx="14" fill="#FFFFFF" stroke="#5865F2" stroke-width="1.6"/></g>
+<path d="M1104 654 a14 14 0 0 1 14 -14 h404 a14 14 0 0 1 14 14 v30 h-432 z" fill="#5865F2"/>
+<text x="1122" y="669" font-size="16" font-weight="700" fill="#FFFFFF">Discord · alerts</text>
+<text x="1124" y="707" font-size="13" fill="#334155" font-weight="400" text-anchor="start">Node lost · sensor fault · stop pressed</text>
+<text x="1124" y="729" font-size="13" fill="#334155" font-weight="400" text-anchor="start">Gateway offline (via NETPIE trigger)</text>
+<rect x="1104" y="780" width="432" height="46" rx="12" fill="#FFFFFF" stroke="#94A3B8" stroke-dasharray="4 4"/>
+<text x="1320" y="808" font-size="13" fill="#475569" font-weight="500" text-anchor="middle">User · dashboard: activity mode + "too bright / too dim"</text>
+<path d="M416 262 H502" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#ar)"/>
+<text x="460" y="240" font-size="12" font-weight="600" fill="#334155" text-anchor="middle" paint-order="stroke" stroke="#F8FAFC" stroke-width="4">ESP-NOW</text>
+<text x="460" y="255" font-size="12" font-weight="600" fill="#334155" text-anchor="middle" paint-order="stroke" stroke="#F8FAFC" stroke-width="4">seq + ACK</text>
+<path d="M416 455 C460 455 460 430 502 430" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#ar)"/>
+<path d="M416 600 C470 600 470 450 502 450" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#ar)"/>
+<path d="M1016 245 H1102" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#ar)"/>
+<text x="1060" y="232" font-size="12" font-weight="600" fill="#334155" text-anchor="middle" paint-order="stroke" stroke="#F8FAFC" stroke-width="4">MQTTS · JSON</text>
+<path d="M1104 285 H1018" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#ar)"/>
+<text x="1060" y="302" font-size="12" font-weight="600" fill="#334155" text-anchor="middle" paint-order="stroke" stroke="#F8FAFC" stroke-width="4">commands</text>
+<path d="M1016 495 H1102" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#ar)"/>
+<text x="1060" y="486" font-size="12" font-weight="600" fill="#334155" text-anchor="middle" paint-order="stroke" stroke="#F8FAFC" stroke-width="4">HTTPS</text>
+<path d="M1104 535 H1018" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#ar)"/>
+<text x="1060" y="552" font-size="12" font-weight="600" fill="#334155" text-anchor="middle" paint-order="stroke" stroke="#F8FAFC" stroke-width="4">profile</text>
+<path d="M1016 565 C1060 565 1060 690 1102 690" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#ar)"/>
+<text x="1062" y="640" font-size="12" font-weight="600" fill="#334155" text-anchor="middle" paint-order="stroke" stroke="#F8FAFC" stroke-width="4">webhook</text>
+<path d="M1536 395 C1556 395 1556 395 1556 430 V690 C1556 700 1546 700 1538 700" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#ar)"/>
+<text x="1550" y="560" font-size="11.5" font-weight="600" fill="#334155" transform="rotate(90 1550 560)" text-anchor="middle" paint-order="stroke" stroke="#EDF9F1" stroke-width="4">offline trigger</text>
+<path d="M760 580 V638" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#ar)"/>
+<text x="772" y="615" font-size="12" font-weight="600" fill="#334155" text-anchor="start" paint-order="stroke" stroke="#F8FAFC" stroke-width="4">servo angles + PWM</text>
+<path d="M504 770 H462 V320 H418" fill="none" stroke="#DC2626" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arr)"/>
+<text x="64" y="735" font-size="14" fill="#DC2626" font-weight="700" text-anchor="start">Closed loop</text>
+<text x="64" y="756" font-size="12.5" fill="#475569" font-weight="400" text-anchor="start">Light reaching the desk is re-measured</text>
+<text x="64" y="774" font-size="12.5" fill="#475569" font-weight="400" text-anchor="start">by BH1750 / TCS34725 and sent back</text>
+<text x="64" y="792" font-size="12.5" fill="#475569" font-weight="400" text-anchor="start">to the gateway control task.</text>
+<line x1="48" y1="880" x2="92" y2="880" stroke="#334155" stroke-width="2" marker-end="url(#ar)"/>
+<text x="102" y="884" font-size="13" fill="#475569" font-weight="400" text-anchor="start">data / control</text>
+<line x1="232" y1="880" x2="276" y2="880" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#ar)"/>
+<text x="286" y="884" font-size="13" fill="#475569" font-weight="400" text-anchor="start">optional / scalability path</text>
+<line x1="480" y1="880" x2="524" y2="880" stroke="#DC2626" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arr)"/>
+<text x="534" y="884" font-size="13" fill="#475569" font-weight="400" text-anchor="start">closed-loop feedback</text>
+<text x="1552" y="884" font-size="13" fill="#64748B" font-weight="600" text-anchor="end">E1 FreeRTOS · E2 ISR · E4 ACK + store-and-forward · E5 MQTTS · E8 own I²C drivers</text>
+</svg>
