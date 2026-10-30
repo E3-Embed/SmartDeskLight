@@ -1,0 +1,20 @@
+# Secrets — never commit (Section 4.5)
+secrets.h
+**/include/secrets.h
+.env
+*.env
+
+# PlatformIO / build
+.pio/
+.vscode/
+build/
+*.bin
+*.elf
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+
+# Test data dumps (commit summaries, not raw multi-MB logs)
+tests/raw/
