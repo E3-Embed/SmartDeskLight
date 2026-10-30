@@ -6,7 +6,11 @@
 #include "message.h"
 #include "secrets.h"   // copy include/secrets.example.h -> include/secrets.h
 
-static const int STOP_BUTTON_PIN = 0;  // TODO: choose pin
+// Pin map — see README
+static const int STOP_BUTTON_PIN = 4;   // INPUT_PULLUP, active low
+static const int PIR_PIN         = 34;  // input-only
+static const int SERVO_PINS[3]   = {25, 26, 27};  // diffuser, ND, warm/CTO
+static const int LED_PWM_PIN     = 18;  // LED driver dimming input
 
 static QueueHandle_t qTelemetry;  // EspNowRx -> Control / Cloud
 static QueueHandle_t qEvents;     // ISR / tasks -> Control
