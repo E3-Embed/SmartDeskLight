@@ -15,7 +15,7 @@ An AI-assisted desk lamp that shapes light with servo-driven filters<br>and clos
 ![NETPIE2020](https://img.shields.io/badge/cloud-NETPIE2020-16A34A)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**[Architecture](#architecture)** · **[How it works](#how-it-works)** · **[Quick start](#quick-start)** · **[Docs](#documentation)** · **[Team](#team)**
+**[Architecture](#architecture)** · **[Control flow](#control-flow)** · **[How it works](#how-it-works)** · **[Quick start](#quick-start)** · **[Docs](#documentation)** · **[Team](#team)**
 
 </div>
 
@@ -81,6 +81,65 @@ flowchart TB
 ```
 
 <sub>Detailed diagram with FreeRTOS tasks and E-items: [`docs/architecture.png`](docs/architecture.png)</sub>
+
+## Control flow
+
+One cycle of the system, from measurement to verified light on the desk:
+
+```mermaid
+%%{init: {"theme": "base", "themeVariables": {"background": "#0D1117", "actorBkg": "#161B22", "actorBorder": "#58A6FF", "actorTextColor": "#E6EDF3", "actorLineColor": "#30363D", "signalColor": "#8B949E", "signalTextColor": "#E6EDF3", "labelBoxBkgColor": "#161B22", "labelBoxBorderColor": "#30363D", "labelTextColor": "#E6EDF3", "loopTextColor": "#C9D1D9", "noteBkgColor": "#1F2A37", "noteBorderColor": "#30363D", "noteTextColor": "#C9D1D9", "activationBkgColor": "#3A2A0B", "activationBorderColor": "#F0A93B", "sequenceNumberColor": "#0D1117"}, "sequence": {"mirrorActors": false, "boxMargin": 8, "messageMargin": 38, "noteMargin": 10}}}%%
+sequenceDiagram
+  autonumber
+  actor U as User
+  participant N as Sensor Node
+  participant G as Gateway
+  participant L as Lamp
+  participant A as LLM API
+  participant P as NETPIE2020
+
+  rect rgb(18, 23, 30)
+    Note over N,G: Sense — every second
+    N->>G: Telemetry { node_id, seq, lux, cct }
+    G-->>N: ACK { seq }
+    opt no ACK within 100 ms
+      N->>G: Retry (max 3)
+    end
+    G->>P: MQTTS publish (raw + shadow)
+  end
+
+  rect rgb(22, 27, 34)
+    Note over U,P: Decide — on activity change, feedback or every 5 min
+    U->>P: Activity / "too bright"
+    P->>G: @msg/sdl/cmd
+    activate G
+    G->>A: HTTPS context (lux, cct, presence, feedback)
+    A-->>G: { target_lux, target_cct, filters[3] }
+    G->>G: Clamp range, rate-limit servos
+    deactivate G
+  end
+
+  rect rgb(18, 23, 30)
+    Note over N,L: Act and verify — closed loop
+    G->>L: Servo angles + PWM
+    L-->>N: Light on desk
+    N->>G: New lux reading
+    alt error within tolerance
+      G->>G: Hold position
+    else still off target
+      G->>L: Fine-tune PWM
+    end
+  end
+
+  rect rgb(22, 27, 34)
+    Note over G,P: Resilience
+    alt cloud unreachable
+      G->>G: Buffer readings, flush on reconnect
+    else stop button or sensor fault
+      G->>L: Safe state (filters folded, LED medium)
+      G->>P: Alert event → Discord
+    end
+  end
+```
 
 ## Highlights
 
