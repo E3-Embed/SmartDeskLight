@@ -10,6 +10,7 @@
 
 #include "ai_client.h"
 #include "app.h"
+#include "ca_bundle.h"
 #include "ring_buffer.h"
 #include "secrets.h"
 
@@ -24,9 +25,8 @@ uint32_t lastWifiTryMs = 0;
 uint32_t lastMqttTryMs = 0;
 uint32_t lastShadowMs = 0;
 uint32_t lastAiMs = 0;
+uint32_t lastNtpRetryMs = 0;
 bool timeConfigured = false;
-bool pinBroker = false;     // true when the broker is checked by certificate fingerprint
-bool pinAlertSent = false;
 bool wasOnline = false;
 uint32_t offlineSinceMs = 0;
 
@@ -51,13 +51,31 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
 }
 
 // ---------------------------------------------------------------- connections
+// Every TLS endpoint (NETPIE 8883, Google, Discord) is verified against the built-in
+// CA bundle, and chain verification compares the certificate's validity dates with
+// the system clock. Until NTP has set that clock, every handshake fails with
+// "certificate is not yet valid", so nothing may connect before the time is real.
+bool timeValid() { return app::nowEpoch() != 0; }  // same threshold the rest of the app uses
+
+bool ensureTime() {
+  if (timeValid()) return true;
+  if (!timeConfigured) {
+    configTime(cfg::kUtcOffsetSec, 0, "pool.ntp.org", "time.google.com", "time.nist.gov");
+    timeConfigured = true;
+    lastNtpRetryMs = millis();
+    Serial.println("[cloud] waiting for NTP sync before TLS...");
+  } else if (millis() - lastNtpRetryMs > 60000) {
+    // SNTP never landed (blocked UDP/123, dead DNS): arm it again instead of failing forever.
+    configTime(cfg::kUtcOffsetSec, 0, "pool.ntp.org", "time.google.com", "time.nist.gov");
+    lastNtpRetryMs = millis();
+    Serial.println("[cloud] NTP still not synced, re-arming");
+  }
+  return false;
+}
+
 bool ensureWifi() {
   if (WiFi.status() == WL_CONNECTED) {
     xEventGroupSetBits(app::events, app::kBitWifiUp);
-    if (!timeConfigured) {
-      configTime(cfg::kUtcOffsetSec, 0, "pool.ntp.org", "time.google.com");  // TLS needs a clock
-      timeConfigured = true;
-    }
     return true;
   }
   xEventGroupClearBits(app::events, app::kBitWifiUp | app::kBitMqttUp);
@@ -75,21 +93,14 @@ bool ensureMqtt() {
   if (millis() - lastMqttTryMs < 5000) return false;
   lastMqttTryMs = millis();
 
-  // E5: open TLS first and check the broker before any credential is sent.
-  // PubSubClient reuses an already-connected client, so the token never goes to an unverified peer.
+  // E5: the broker is authenticated by the CA bundle chain check. The TLS session is
+  // opened before any credential is sent, so the token never reaches an unverified peer.
   if (!tls.connected()) {
     if (!tls.connect(cfg::kMqttHost, cfg::kMqttPort)) {
-      Serial.println("[cloud] TLS connect to NETPIE failed");
+      Serial.printf("[cloud] TLS connect to NETPIE failed (clock=%lld)\n",
+                    static_cast<long long>(time(nullptr)));
       return false;
     }
-    if (pinBroker && !tls.verify(cfg::kMqttCertSha256, cfg::kMqttHost)) {
-      tls.stop();
-      Serial.println("[cloud] NETPIE certificate does not match the pinned fingerprint, not sending credentials");
-      if (!pinAlertSent) app::raiseAlert("NETPIE certificate mismatch, cloud connection refused");
-      pinAlertSent = true;  // one alert per mismatch episode, not one every retry
-      return false;
-    }
-    pinAlertSent = false;
   }
 
   // NETPIE2020: client id = device Client ID, username = Token, password = Secret.
@@ -180,8 +191,11 @@ void flushBacklog(int maxItems) {
 void sendDiscord(const char *text) {
   if (strlen(DISCORD_WEBHOOK) == 0) return;
   WiFiClientSecure client;
-  if (strlen(DISCORD_CA_PEM) > 0) client.setCACert(DISCORD_CA_PEM);
-  else client.setInsecure();  // development only: fill DISCORD_CA_PEM in secrets.h
+#if defined(ALLOW_INSECURE_TLS)
+  client.setInsecure();  // development only: build with -DALLOW_INSECURE_TLS
+#else
+  ca::useBuiltin(client);  // Discord's chain is publicly trusted
+#endif
 
   HTTPClient http;
   if (!http.begin(client, DISCORD_WEBHOOK)) return;
@@ -196,19 +210,19 @@ void sendDiscord(const char *text) {
   if (code != 204 && code != 200) Serial.printf("[cloud] Discord HTTP %d\n", code);
 }
 
-void handleAlerts(bool wifiUp, bool mqttUp) {
+void handleAlerts(bool httpUp, bool mqttUp) {
   app::Alert a;
   while (xQueueReceive(app::qAlerts, &a, 0) == pdTRUE) {
     if (mqttUp) mqtt.publish(cfg::kTopicAlert, a.text);
-    if (wifiUp) sendDiscord(a.text);
+    if (httpUp) sendDiscord(a.text);
   }
 }
 
 // ---------------------------------------------------------------- AI
-void maybeRunAi(bool wifiUp) {
+void maybeRunAi(bool online) {
   bool requested = xEventGroupGetBits(app::events) & app::kBitAiRequest;
   bool periodic = millis() - lastAiMs > cfg::kAiPeriodMs;
-  if (!wifiUp || !(requested || periodic)) return;
+  if (!online || !(requested || periodic)) return;
   xEventGroupClearBits(app::events, app::kBitAiRequest);
   lastAiMs = millis();
 
@@ -264,17 +278,15 @@ void updateOnlineState(bool online) {
 }  // namespace
 
 void task(void *) {
-  // E5: verify the broker. Default: pin its certificate (cfg::kMqttCertSha256).
-  // If NETPIE_CA_PEM holds NETPIE's CA certificate, normal chain verification is used instead.
-  if (strlen(NETPIE_CA_PEM) > 0) {
-    tls.setCACert(NETPIE_CA_PEM);
-  } else if (strlen(cfg::kMqttCertSha256) > 0) {
-    tls.setInsecure();  // chain cannot be built (private CA); the fingerprint check replaces it
-    pinBroker = true;
-  } else {
-    tls.setInsecure();
-    Serial.println("[cloud] WARNING: no CA and no fingerprint, TLS without certificate check");
-  }
+  // E5: verify every endpoint against the CA bundle embedded in the firmware.
+  // NETPIE's 8883 chain ends at "USERTrust RSA Certification Authority" and Google /
+  // Discord use public roots too, so no PEM and no leaf fingerprint are needed.
+#if defined(ALLOW_INSECURE_TLS)
+  tls.setInsecure();
+  Serial.println("[cloud] WARNING: ALLOW_INSECURE_TLS set, MQTT TLS without certificate check");
+#else
+  ca::useBuiltin(tls);
+#endif
   tls.setHandshakeTimeout(10);
   mqtt.setServer(cfg::kMqttHost, cfg::kMqttPort);
   mqtt.setCallback(onMqttMessage);
@@ -284,7 +296,8 @@ void task(void *) {
 
   for (;;) {
     bool wifiUp = ensureWifi();
-    bool mqttUp = wifiUp && ensureMqtt();
+    bool tlsReady = wifiUp && ensureTime();  // chain checks need a real clock
+    bool mqttUp = tlsReady && ensureMqtt();
     updateOnlineState(mqttUp);
     if (mqttUp) mqtt.loop();
 
@@ -300,8 +313,8 @@ void task(void *) {
       publishShadow();
     }
 
-    handleAlerts(wifiUp, mqttUp);
-    maybeRunAi(wifiUp);
+    handleAlerts(wifiUp && tlsReady, mqttUp);
+    maybeRunAi(wifiUp && tlsReady);
 
     {
       app::StateLock lock;
