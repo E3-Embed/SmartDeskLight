@@ -1,18 +1,18 @@
-# Testing & evaluation
+# การทดสอบและประเมินผล
 
-Every metric is repeated at least 10 times and reported as mean / min / max. Details and results live in [`tests/README.md`](../tests/README.md).
+ทุกตัวชี้วัดทดสอบซ้ำอย่างน้อย 10 ครั้ง และรายงานเป็นค่าเฉลี่ย / ต่ำสุด / สูงสุด รายละเอียดและผลลัพธ์อยู่ใน [`tests/README.md`](../tests/README.md)
 
-| Metric | Method |
+| ตัวชี้วัด | วิธีวัด |
 |---|---|
-| Sensor accuracy | BH1750 vs. reference lux meter at 5 light levels |
-| End-to-end latency | sensor → actuator and sensor → dashboard, from timestamps |
-| Packet delivery rate | node `seq` vs. packets received at the gateway |
-| Power | INA219 readings per lighting mode |
-| AI accuracy | share of recommendations accepted without change |
-| Uptime | continuous run ≥ 24 h |
+| ความแม่นยำของเซนเซอร์ | เทียบ BH1750 กับเครื่องวัดแสงอ้างอิงที่ 5 ระดับแสง |
+| ความหน่วงตลอดเส้นทาง | เซนเซอร์ → แอคชูเอเตอร์ และเซนเซอร์ → แดชบอร์ด คำนวณจาก timestamp |
+| อัตราการส่งแพ็กเก็ตสำเร็จ | `seq` ของโหนด เทียบกับจำนวนแพ็กเก็ตที่เกตเวย์ได้รับ |
+| กำลังไฟ | ค่าจาก INA219 ในแต่ละโหมดแสง |
+| ความแม่นยำของ AI | สัดส่วนคำแนะนำที่ผู้ใช้ยอมรับโดยไม่ต้องแก้ |
+| Uptime | ทำงานต่อเนื่อง ≥ 24 ชั่วโมง |
 
-Failure tests cover Wi-Fi loss, an unplugged sensor, power loss with automatic recovery, and a lost node triggering an alert.
+การทดสอบกรณีขัดข้องครอบคลุม Wi-Fi หลุด, ถอดเซนเซอร์ออก, ไฟดับแล้วกู้คืนเองอัตโนมัติ และโหนดหายแล้วมีการแจ้งเตือน
 
 ---
 
-[← Back to README](../README.md)
+[← กลับไปที่ README](../README.md)

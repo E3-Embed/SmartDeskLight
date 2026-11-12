@@ -1,42 +1,42 @@
-# Hardware
+# ฮาร์ดแวร์
 
-## Bill of materials
+## รายการอุปกรณ์
 
-| Item | Qty | Location | Purpose | Est. cost (THB) |
+| อุปกรณ์ | จำนวน | ติดตั้งที่ | หน้าที่ | ราคาประมาณ (บาท) |
 |---|:-:|---|---|--:|
-| ESP32 DevKit | 2 (+1) | Node / Gateway | MCUs (+1 for a second physical node) | 380 (+190) |
-| BH1750 | 1 | Node | Desk illuminance (lux) — closed-loop feedback | 74–120 |
-| TCS34725 | 1 | Node | RGB + clear → colour temperature | 85–180 |
-| VL53L0X | 1 | Gateway | Distance lamp → user / desk | 165–320 |
-| PIR (HC-SR501) | 1 | Gateway | Presence at the desk | 40–100 |
-| INA219 | 1 | Gateway | Lamp voltage / current / power | 45–120 |
-| Servo SG90 / MG90S | 3 | Gateway | Flip each filter in or out of the light path | 300–540 |
-| LED module + constant-current driver | 1 | Gateway | Light source with PWM dimming | 230–550 |
-| Supply, filter films, frame, hinges, PCB, wiring, fuse, button, spares | — | — | Build | 1,000–2,400 |
-| **Total** | | | **5 sensor types · 1 actuator type** | **≈ 2,320–4,710** |
+| ESP32 DevKit | 2 (+1) | โหนด / เกตเวย์ | ไมโครคอนโทรลเลอร์ (+1 สำหรับโหนดจริงตัวที่สอง) | 380 (+190) |
+| BH1750 | 1 | โหนด | วัดความสว่างบนโต๊ะ (lux) — ใช้เป็น feedback ของวงปิด | 74–120 |
+| TCS34725 | 1 | โหนด | RGB + clear → อุณหภูมิสี | 85–180 |
+| VL53L0X | 1 | เกตเวย์ | ระยะจากโคมถึงผู้ใช้ / โต๊ะ | 165–320 |
+| PIR (HC-SR501) | 1 | เกตเวย์ | ตรวจว่ามีคนอยู่ที่โต๊ะ | 40–100 |
+| INA219 | 1 | เกตเวย์ | แรงดัน / กระแส / กำลังไฟของโคม | 45–120 |
+| Servo SG90 / MG90S | 3 | เกตเวย์ | พับฟิลเตอร์แต่ละแผ่นเข้า-ออกจากทางแสง | 300–540 |
+| โมดูล LED + ไดรเวอร์กระแสคงที่ | 1 | เกตเวย์ | แหล่งกำเนิดแสง หรี่ด้วย PWM | 230–550 |
+| แหล่งจ่ายไฟ, ฟิล์มฟิลเตอร์, โครง, บานพับ, PCB, สายไฟ, ฟิวส์, ปุ่ม, อะไหล่สำรอง | — | — | งานประกอบ | 1,000–2,400 |
+| **รวม** | | | **เซนเซอร์ 5 ชนิด · แอคชูเอเตอร์ 1 ชนิด** | **≈ 2,320–4,710** |
 
-## Pin map (ESP32 DevKit)
+## ผังขา (ESP32 DevKit)
 
-| Board | Signal | GPIO | Notes |
+| บอร์ด | สัญญาณ | GPIO | หมายเหตุ |
 |---|---|:-:|---|
-| Node | I²C SDA / SCL | 21 / 22 | BH1750 `0x23`, TCS34725 `0x29` |
-| Gateway | I²C SDA / SCL | 21 / 22 | VL53L0X `0x29`, INA219 `0x40` |
-| Gateway | PIR output | 34 | Input-only pin |
-| Gateway | Stop / override button | 4 | `INPUT_PULLUP`, active low, falling-edge ISR |
-| Gateway | Servo 1 / 2 / 3 | 25 / 26 / 27 | Diffuser / ND / Warm-CTO, LEDC 50 Hz |
-| Gateway | LED driver PWM | 18 | LEDC ≈ 5 kHz |
-| Gateway | Status LED | 2 | On-board |
+| โหนด | I²C SDA / SCL | 21 / 22 | BH1750 `0x23`, TCS34725 `0x29` |
+| เกตเวย์ | I²C SDA / SCL | 21 / 22 | VL53L0X `0x29`, INA219 `0x40` |
+| เกตเวย์ | เอาต์พุต PIR | 34 | ขาอินพุตอย่างเดียว |
+| เกตเวย์ | ปุ่มหยุด / override | 4 | `INPUT_PULLUP`, active low, ISR ขอบขาลง |
+| เกตเวย์ | Servo 1 / 2 / 3 | 25 / 26 / 27 | Diffuser / ND / Warm-CTO, LEDC 50 Hz |
+| เกตเวย์ | PWM ของไดรเวอร์ LED | 18 | LEDC ≈ 5 kHz |
+| เกตเวย์ | LED แสดงสถานะ | 2 | LED บนบอร์ด |
 
 > [!IMPORTANT]
-> Servos run from a separate 5 V ≥ 2 A rail, the LED from its own DC supply through the driver, and INA219 sits high-side on the LED rail. **All grounds are common.**
+> เซอร์โวใช้ไฟเลี้ยง 5 V ≥ 2 A แยกต่างหาก LED ใช้แหล่งจ่าย DC ของตัวเองผ่านไดรเวอร์ และ INA219 ต่อแบบ high-side บนสายไฟของ LED **กราวด์ทั้งหมดต้องต่อร่วมกัน**
 
-## Safety
+## ความปลอดภัย
 
-- Low-voltage DC only — no mains wiring in the project
-- Mechanical end stops, software angle limits and a timeout on every servo move
-- Stop button always wins; safe state = filters folded, LED at medium
-- Filter films rated for lighting use, mounted away from hot parts
+- ใช้ไฟ DC แรงดันต่ำเท่านั้น — ไม่มีการเดินสายไฟบ้านในโครงงาน
+- มีตัวหยุดเชิงกล จำกัดมุมในซอฟต์แวร์ และกำหนด timeout ทุกครั้งที่เซอร์โวขยับ
+- ปุ่มหยุดมีสิทธิ์สูงสุดเสมอ สถานะปลอดภัย = พับฟิลเตอร์ออก, LED ระดับกลาง
+- ฟิล์มฟิลเตอร์ต้องเป็นชนิดสำหรับงานแสงสว่าง และติดตั้งห่างจากชิ้นส่วนที่ร้อน
 
 ---
 
-[← Back to README](../README.md)
+[← กลับไปที่ README](../README.md)
