@@ -25,6 +25,8 @@ uint32_t lastMqttTryMs = 0;
 uint32_t lastShadowMs = 0;
 uint32_t lastAiMs = 0;
 bool timeConfigured = false;
+bool pinBroker = false;     // true when the broker is checked by certificate fingerprint
+bool pinAlertSent = false;
 bool wasOnline = false;
 uint32_t offlineSinceMs = 0;
 
@@ -72,6 +74,23 @@ bool ensureMqtt() {
   xEventGroupClearBits(app::events, app::kBitMqttUp);
   if (millis() - lastMqttTryMs < 5000) return false;
   lastMqttTryMs = millis();
+
+  // E5: open TLS first and check the broker before any credential is sent.
+  // PubSubClient reuses an already-connected client, so the token never goes to an unverified peer.
+  if (!tls.connected()) {
+    if (!tls.connect(cfg::kMqttHost, cfg::kMqttPort)) {
+      Serial.println("[cloud] TLS connect to NETPIE failed");
+      return false;
+    }
+    if (pinBroker && !tls.verify(cfg::kMqttCertSha256, cfg::kMqttHost)) {
+      tls.stop();
+      Serial.println("[cloud] NETPIE certificate does not match the pinned fingerprint, not sending credentials");
+      if (!pinAlertSent) app::raiseAlert("NETPIE certificate mismatch, cloud connection refused");
+      pinAlertSent = true;  // one alert per mismatch episode, not one every retry
+      return false;
+    }
+    pinAlertSent = false;
+  }
 
   // NETPIE2020: client id = device Client ID, username = Token, password = Secret.
   if (!mqtt.connect(NETPIE_CLIENT_ID, NETPIE_TOKEN, NETPIE_SECRET)) {
@@ -245,12 +264,18 @@ void updateOnlineState(bool online) {
 }  // namespace
 
 void task(void *) {
+  // E5: verify the broker. Default: pin its certificate (cfg::kMqttCertSha256).
+  // If NETPIE_CA_PEM holds NETPIE's CA certificate, normal chain verification is used instead.
   if (strlen(NETPIE_CA_PEM) > 0) {
-    tls.setCACert(NETPIE_CA_PEM);  // E5: verify the broker's certificate
+    tls.setCACert(NETPIE_CA_PEM);
+  } else if (strlen(cfg::kMqttCertSha256) > 0) {
+    tls.setInsecure();  // chain cannot be built (private CA); the fingerprint check replaces it
+    pinBroker = true;
   } else {
     tls.setInsecure();
-    Serial.println("[cloud] WARNING: NETPIE_CA_PEM empty, TLS without certificate check");
+    Serial.println("[cloud] WARNING: no CA and no fingerprint, TLS without certificate check");
   }
+  tls.setHandshakeTimeout(10);
   mqtt.setServer(cfg::kMqttHost, cfg::kMqttPort);
   mqtt.setCallback(onMqttMessage);
   mqtt.setBufferSize(1024);

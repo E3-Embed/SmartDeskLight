@@ -49,6 +49,12 @@ constexpr uint8_t kFirstSimulatedId = 101;
 // ---------------------------------------------------------------- cloud
 constexpr const char *kMqttHost = "mqtt.netpie.io";
 constexpr uint16_t kMqttPort = 1884;     // NETPIE2020 MQTTS
+// SHA-256 fingerprint of the NETPIE broker certificate (CN *.netpie.io, valid to 2036-09-12).
+// The broker sends only this certificate, signed by NETPIE's private "NEXPIE Device Broker" CA,
+// so there is no public root to pass to setCACert(); the firmware pins this certificate instead.
+// Re-check with: openssl s_client -connect mqtt.netpie.io:1884 </dev/null | openssl x509 -noout -fingerprint -sha256
+constexpr const char *kMqttCertSha256 =
+    "91:D7:1A:00:54:40:C3:DC:95:2D:7D:5D:BB:B2:B6:94:35:F9:3F:7D:47:4E:83:AA:2C:81:B1:64:75:59:C7:46";
 constexpr uint32_t kShadowPeriodMs = 30000;  // NETPIE free tier: ~86k shadow writes/month (quota 500k)
 constexpr uint32_t kAiPeriodMs = 5UL * 60UL * 1000UL;
 constexpr int kBufferSlots = 300;        // store-and-forward: ~5 min of 1 Hz readings (~11 kB)
