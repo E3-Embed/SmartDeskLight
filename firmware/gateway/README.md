@@ -79,9 +79,13 @@ The AI only proposes `target_lux`, `target_cct` and a filter set; `control::sani
 | Topic | Direction | Payload |
 |---|---|---|
 | `@msg/sdl/N<id>/telemetry` | gateway → cloud | one reading: `node_id, seq, ts, node_ms, lux, r, g, b, c, cct` |
-| `@shadow/data/update` | gateway → cloud, every 5 s | `n1_lux, n1_cct, n1_rx, n1_seq, dist_mm, presence, lamp_mW, diffuser, nd, warm, pwm, safe, mode, target_lux, ai, buffered, dropped, heap, uptime_s` |
+| `@shadow/data/update` | gateway → cloud, every 30 s | `n1_lux, n1_cct, n1_rx, n1_seq, dist_mm, presence, lamp_mW, diffuser, nd, warm, pwm, safe, mode, target_lux, ai, buffered, dropped, heap, uptime_s` |
 | `@msg/sdl/cmd` | dashboard → gateway | `{"mode":"coding"}` or `{"feedback":"too_bright"}` / `"too_dim"` |
 | `@msg/sdl/alert` | gateway → cloud | alert text (also sent to Discord) |
+
+### NETPIE project
+
+Project `SmartDeskLight`, group `sdl-group`, devices `gateway` (this firmware) and `dashboard` (the dashboard client that publishes `@msg/sdl/cmd`). The `gateway` device has a schema with Feed enabled for `n1_lux, n1_cct, lamp_mW, pwm, target_lux, dist_mm, presence, buffered` (all numbers); other shadow fields are kept in the shadow but not stored in the Feed. At one shadow update every 30 s this stays well inside the free quota.
 
 ### Metrics you can read from the shadow
 
