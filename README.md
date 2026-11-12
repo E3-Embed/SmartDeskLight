@@ -2,48 +2,46 @@
 
 # 💡 SmartDeskLight
 
-### Light that adapts to how you work
+### โคมไฟโต๊ะอัจฉริยะ ปรับแสงตามการทำงานของคุณ
 
-An AI-assisted desk lamp that shapes light with servo-driven filters<br>and closes the loop on the lux that actually reaches your desk.
-
-<sub>โคมไฟโต๊ะอัจฉริยะ ปรับสภาพแสงอัตโนมัติด้วย AI เพื่อความสบายตา</sub>
+โคมไฟโต๊ะที่มี AI ช่วยเลือกสภาพแสง ปรับลักษณะแสงด้วยฟิลเตอร์ที่ขับด้วยเซอร์โว<br>และควบคุมแบบวงปิดจากค่าความสว่าง (lux) ที่ตกถึงโต๊ะจริง
 
 <br>
 
-[![Firmware build](https://github.com/E3-Embed/SmartDeskLight/actions/workflows/build.yml/badge.svg)](https://github.com/E3-Embed/SmartDeskLight/actions/workflows/build.yml)
+[![บิลด์เฟิร์มแวร์](https://github.com/E3-Embed/SmartDeskLight/actions/workflows/build.yml/badge.svg)](https://github.com/E3-Embed/SmartDeskLight/actions/workflows/build.yml)
 ![ESP32](https://img.shields.io/badge/ESP32-FreeRTOS-E7352C?logo=espressif&logoColor=white)
 ![NETPIE2020](https://img.shields.io/badge/cloud-NETPIE2020-16A34A)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**[Architecture](#architecture)** · **[Control flow](#control-flow)** · **[How it works](#how-it-works)** · **[Quick start](#quick-start)** · **[Docs](#documentation)** · **[Team](#team)**
+**[สถาปัตยกรรม](#สถาปัตยกรรม)** · **[ลำดับการทำงาน](#ลำดับการทำงาน)** · **[หลักการทำงาน](#หลักการทำงาน)** · **[เริ่มต้นใช้งาน](#เริ่มต้นใช้งาน)** · **[เอกสาร](#เอกสาร)** · **[ทีม](#ทีม)**
 
 </div>
 
 <br>
 
-## Architecture
+## สถาปัตยกรรม
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"background": "#0D1117", "primaryTextColor": "#E6EDF3", "textColor": "#C9D1D9", "lineColor": "#8B949E", "edgeLabelBackground": "#0D1117", "clusterBkg": "#161B22", "clusterBorder": "#30363D", "titleColor": "#E6EDF3"}, "flowchart": {"curve": "basis", "padding": 18, "nodeSpacing": 45, "rankSpacing": 55}}}%%
 flowchart TB
-  subgraph SYS["SmartDeskLight · System Architecture"]
+  subgraph SYS["SmartDeskLight · สถาปัตยกรรมระบบ"]
     direction TB
 
-    subgraph NODE["SENSOR NODE · ESP32 A"]
-      S["BH1750 + TCS34725<br/>lux · colour temp"]
+    subgraph NODE["โหนดเซนเซอร์ · ESP32 A"]
+      S["BH1750 + TCS34725<br/>ความสว่าง · อุณหภูมิสี"]
     end
 
-    subgraph GW["GATEWAY · ESP32 B · FreeRTOS"]
+    subgraph GW["เกตเวย์ · ESP32 B · FreeRTOS"]
       G1["VL53L0X · PIR · INA219"]
-      G2["Control loop"]
-      G3["Cloud task<br/>offline buffer"]
+      G2["ลูปควบคุม"]
+      G3["งานคลาวด์<br/>บัฟเฟอร์ออฟไลน์"]
     end
 
-    subgraph LAMP["LAMP"]
-      L["3 servo filters<br/>+ LED PWM"]
+    subgraph LAMP["โคมไฟ"]
+      L["ฟิลเตอร์เซอร์โว 3 ชุด<br/>+ LED PWM"]
     end
 
-    subgraph CLOUD["CLOUD & SERVICES"]
+    subgraph CLOUD["คลาวด์และบริการ"]
       N[("NETPIE2020<br/>Feed · Dashboard")]
       A{{"LLM API"}}
       D["Discord"]
@@ -52,8 +50,8 @@ flowchart TB
 
   S -->|"ESP-NOW · ACK"| G2
   G1 --> G2
-  G2 -->|"servo · PWM"| L
-  L -.->|"measured light"| S
+  G2 -->|"เซอร์โว · PWM"| L
+  L -.->|"แสงที่วัดได้"| S
   G2 <--> G3
   G3 <-->|"MQTTS"| N
   G3 <-->|"HTTPS"| A
@@ -80,124 +78,124 @@ flowchart TB
   linkStyle 3 stroke:#FF6B6B,stroke-width:2px
 ```
 
-<sub>Detailed diagram with FreeRTOS tasks and E-items: [`docs/architecture.png`](docs/architecture.png)</sub>
+<sub>ไดอะแกรมแบบละเอียดพร้อมงาน FreeRTOS และหัวข้อ E: [`docs/architecture.png`](docs/architecture.png)</sub>
 
-## Control flow
+## ลำดับการทำงาน
 
-One cycle of the system, from measurement to verified light on the desk:
+การทำงานหนึ่งรอบของระบบ ตั้งแต่การวัดค่าจนถึงแสงบนโต๊ะที่ตรวจสอบแล้ว:
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"background": "#0D1117", "actorBkg": "#161B22", "actorBorder": "#58A6FF", "actorTextColor": "#E6EDF3", "actorLineColor": "#30363D", "signalColor": "#8B949E", "signalTextColor": "#E6EDF3", "labelBoxBkgColor": "#161B22", "labelBoxBorderColor": "#30363D", "labelTextColor": "#E6EDF3", "loopTextColor": "#C9D1D9", "noteBkgColor": "#1F2A37", "noteBorderColor": "#30363D", "noteTextColor": "#C9D1D9", "activationBkgColor": "#3A2A0B", "activationBorderColor": "#F0A93B", "sequenceNumberColor": "#0D1117"}, "sequence": {"mirrorActors": false, "boxMargin": 8, "messageMargin": 38, "noteMargin": 10}}}%%
 sequenceDiagram
   autonumber
-  actor U as User
-  participant N as Sensor Node
-  participant G as Gateway
-  participant L as Lamp
+  actor U as ผู้ใช้
+  participant N as โหนดเซนเซอร์
+  participant G as เกตเวย์
+  participant L as โคมไฟ
   participant A as LLM API
   participant P as NETPIE2020
 
   rect rgb(18, 23, 30)
-    Note over N,G: Sense — every second
+    Note over N,G: ตรวจวัด — ทุกวินาที
     N->>G: Telemetry { node_id, seq, lux, cct }
     G-->>N: ACK { seq }
-    opt no ACK within 100 ms
-      N->>G: Retry (max 3)
+    opt ไม่ได้รับ ACK ภายใน 100 ms
+      N->>G: ส่งซ้ำ (สูงสุด 3 ครั้ง)
     end
-    G->>P: MQTTS publish (raw + shadow)
+    G->>P: MQTTS publish (ข้อมูลดิบ + shadow)
   end
 
   rect rgb(22, 27, 34)
-    Note over U,P: Decide — on activity change, feedback or every 5 min
-    U->>P: Activity / "too bright"
+    Note over U,P: ตัดสินใจ — เมื่อเปลี่ยนกิจกรรม มี feedback หรือทุก 5 นาที
+    U->>P: เลือกกิจกรรม / "สว่างเกินไป"
     P->>G: @msg/sdl/cmd
     activate G
-    G->>A: HTTPS context (lux, cct, presence, feedback)
+    G->>A: HTTPS ส่งบริบท (lux, cct, presence, feedback)
     A-->>G: { target_lux, target_cct, filters[3] }
-    G->>G: Clamp range, rate-limit servos
+    G->>G: จำกัดช่วงค่า และจำกัดความถี่การขยับเซอร์โว
     deactivate G
   end
 
   rect rgb(18, 23, 30)
-    Note over N,L: Act and verify — closed loop
-    G->>L: Servo angles + PWM
-    L-->>N: Light on desk
-    N->>G: New lux reading
-    alt error within tolerance
-      G->>G: Hold position
-    else still off target
-      G->>L: Fine-tune PWM
+    Note over N,L: สั่งงานและตรวจสอบ — วงปิด
+    G->>L: มุมเซอร์โว + PWM
+    L-->>N: แสงที่ตกบนโต๊ะ
+    N->>G: ค่า lux ใหม่
+    alt ค่าคลาดเคลื่อนอยู่ในเกณฑ์
+      G->>G: คงค่าเดิม
+    else ยังไม่ถึงค่าเป้าหมาย
+      G->>L: ปรับ PWM อย่างละเอียด
     end
   end
 
   rect rgb(22, 27, 34)
-    Note over G,P: Resilience
-    alt cloud unreachable
-      G->>G: Buffer readings, flush on reconnect
-    else stop button or sensor fault
-      G->>L: Safe state (filters folded, LED medium)
-      G->>P: Alert event → Discord
+    Note over G,P: การรับมือเมื่อเกิดปัญหา
+    alt เชื่อมต่อคลาวด์ไม่ได้
+      G->>G: เก็บข้อมูลในบัฟเฟอร์ แล้วส่งต่อเมื่อเชื่อมต่อได้
+    else กดปุ่มหยุด หรือเซนเซอร์ขัดข้อง
+      G->>L: สถานะปลอดภัย (พับฟิลเตอร์ออก, LED ระดับกลาง)
+      G->>P: แจ้งเตือน → Discord
     end
   end
 ```
 
-## Highlights
+## จุดเด่น
 
-- **Shapes light, not just brightness** — diffuser, ND and warm/CTO filters flip in and out on three servos
-- **Closed loop** — every change is re-measured on the desk (BH1750 lux, TCS34725 colour)
-- **Learns your preference** — an LLM suggests a profile per activity and adapts to *too bright / too dim* feedback
-- **Built to keep working** — ESP-NOW with ACK/retry, store-and-forward offline, rule-based fallback
+- **ปรับลักษณะแสง ไม่ใช่แค่ความสว่าง** — ฟิลเตอร์ diffuser, ND และ warm/CTO พับเข้า-ออกด้วยเซอร์โว 3 ตัว
+- **ควบคุมแบบวงปิด** — ทุกการเปลี่ยนแปลงถูกวัดซ้ำบนโต๊ะ (BH1750 วัด lux, TCS34725 วัดสี)
+- **เรียนรู้ความชอบของผู้ใช้** — LLM เสนอโปรไฟล์แสงตามกิจกรรม และปรับตาม feedback *สว่างเกินไป / มืดเกินไป*
+- **ออกแบบให้ทำงานต่อได้เสมอ** — ESP-NOW พร้อม ACK/ส่งซ้ำ, เก็บข้อมูลไว้ส่งทีหลังเมื่อออฟไลน์, มีโปรไฟล์ตามกฎสำรองเมื่อ AI ใช้ไม่ได้
 
-## How it works
+## หลักการทำงาน
 
-| | Step | What happens |
+| | ขั้นตอน | สิ่งที่เกิดขึ้น |
 |:-:|---|---|
-| 1 | **Sense** | The sensor node measures desk lux and colour; the gateway reads presence, distance and lamp power |
-| 2 | **Decide** | The gateway sends context to the AI and receives a target lux, colour temperature and filter set |
-| 3 | **Act** | FreeRTOS control task moves the filter servos and trims the LED with PWM |
-| 4 | **Verify** | The new light is measured again and the loop corrects any error |
+| 1 | **ตรวจวัด** | โหนดเซนเซอร์วัดความสว่างและสีบนโต๊ะ ส่วนเกตเวย์อ่านค่าการมีคนอยู่ ระยะห่าง และกำลังไฟของโคม |
+| 2 | **ตัดสินใจ** | เกตเวย์ส่งบริบทให้ AI แล้วได้ค่าเป้าหมาย lux อุณหภูมิสี และชุดฟิลเตอร์กลับมา |
+| 3 | **สั่งงาน** | งานควบคุมใน FreeRTOS ขยับเซอร์โวฟิลเตอร์และปรับ LED ด้วย PWM |
+| 4 | **ตรวจสอบ** | วัดแสงใหม่อีกครั้ง แล้วลูปควบคุมแก้ค่าคลาดเคลื่อนที่เหลือ |
 
-## Quick start
+## เริ่มต้นใช้งาน
 
 ```bash
 git clone https://github.com/E3-Embed/SmartDeskLight.git && cd SmartDeskLight
-cp firmware/gateway/include/secrets.example.h firmware/gateway/include/secrets.h   # add your keys
+cp firmware/gateway/include/secrets.example.h firmware/gateway/include/secrets.h   # ใส่คีย์ของคุณ
 pio run -d firmware/gateway -t upload
 pio run -d firmware/sensor_node -t upload
 ```
 
-Requires [PlatformIO](https://platformio.org/), two ESP32 boards and a NETPIE2020 device — see the docs below.
+ต้องมี [PlatformIO](https://platformio.org/), บอร์ด ESP32 สองบอร์ด และ device บน NETPIE2020 — ดูรายละเอียดในเอกสารด้านล่าง
 
-## Documentation
+## เอกสาร
 
-| | |
+| เอกสาร | เนื้อหา |
 |---|---|
-| [Hardware](docs/hardware.md) | Bill of materials, pin map, power and safety |
-| [Protocols](docs/protocols.md) | ESP-NOW packet, NETPIE topics, AI request / response |
-| [Firmware](docs/firmware.md) | FreeRTOS tasks and Embedded Engineering Depth items |
-| [Testing](docs/testing.md) | Metrics, method and results |
-| [Dashboard](dashboard/README.md) | NETPIE2020 device, dashboard and alerts setup |
-| [Contributing](CONTRIBUTING.md) | Branches, commit style, secrets policy |
+| [ฮาร์ดแวร์](docs/hardware.md) | รายการอุปกรณ์ ผังขา ไฟเลี้ยง และความปลอดภัย |
+| [โปรโตคอล](docs/protocols.md) | แพ็กเก็ต ESP-NOW, topic ของ NETPIE, คำขอและคำตอบของ AI |
+| [เฟิร์มแวร์](docs/firmware.md) | งาน FreeRTOS และหัวข้อ Embedded Engineering Depth |
+| [การทดสอบ](docs/testing.md) | ตัวชี้วัด วิธีทดสอบ และผลลัพธ์ |
+| [แดชบอร์ด](dashboard/README.md) | การตั้งค่า device, dashboard และการแจ้งเตือนบน NETPIE2020 |
+| [แนวทางการร่วมพัฒนา](CONTRIBUTING.md) | การตั้งชื่อ branch รูปแบบ commit และนโยบายข้อมูลลับ |
 
-## Team
+## ทีม
 
-| Member | Role |
+| สมาชิก | บทบาท |
 |---|---|
-| **รชาทัช บุญพัฒน์** · 6833230421 | System Architect & Integration |
-| **ฐากูร นันตสุวรรณ** · 6833060021 | Embedded Developer — Sensor Node |
-| **นรินธร ยางงาม** · 6833136121 | Embedded Developer — Gateway & Cloud |
-| **ปุณยวีร์ พัฒนประดิษฐ์** · 6833170421 | UI/UX & Dashboard Developer |
-| **กษิดิศ ประจงการ** · 6833008521 | Project Manager & Test Lead |
+| **รชาทัช บุญพัฒน์** · 6833230421 | สถาปนิกระบบและผู้รวมระบบ |
+| **ฐากูร นันตสุวรรณ** · 6833060021 | นักพัฒนาระบบฝังตัว — โหนดเซนเซอร์ |
+| **นรินธร ยางงาม** · 6833136121 | นักพัฒนาระบบฝังตัว — เกตเวย์และคลาวด์ |
+| **ปุณยวีร์ พัฒนประดิษฐ์** · 6833170421 | นักพัฒนา UI/UX และแดชบอร์ด |
+| **กษิดิศ ประจงการ** · 6833008521 | ผู้จัดการโครงการและหัวหน้าฝ่ายทดสอบ |
 
-## Status
+## สถานะ
 
-- [x] Proposal, architecture and CI — *30 Oct 2026*
-- [ ] End-to-end data flow: node → gateway → cloud → dashboard — *20 Nov 2026*
-- [ ] Final demo, report and video — *8 Dec 2026*
+- [x] ข้อเสนอโครงงาน สถาปัตยกรรม และ CI — *30 ต.ค. 2026*
+- [ ] ข้อมูลไหลครบวงจร: โหนด → เกตเวย์ → คลาวด์ → แดชบอร์ด — *20 พ.ย. 2026*
+- [ ] เดโมรอบสุดท้าย รายงาน และวิดีโอ — *8 ธ.ค. 2026*
 
 <br>
 
 <div align="center">
-<sub>Embedded System (CEDT) Final Project 2026 · Chulalongkorn University<br>
-AI tools used: Claude (proposal editing, repo scaffold, docs, diagram), GitHub Copilot (commit messages) · <a href="LICENSE">MIT License</a></sub>
+<sub>โครงงานรายวิชา Embedded System (CEDT) ปี 2026 · จุฬาลงกรณ์มหาวิทยาลัย<br>
+เครื่องมือ AI ที่ใช้: Claude (แก้ไขข้อเสนอโครงงาน, โครงสร้าง repo, เอกสาร, ไดอะแกรม), GitHub Copilot (ข้อความ commit) · <a href="LICENSE">สัญญาอนุญาต MIT</a></sub>
 </div>

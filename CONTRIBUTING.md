@@ -1,23 +1,23 @@
-# Contributing
+# แนวทางการร่วมพัฒนา
 
-Every member must have their own commits in this repository (course requirement M8), so please work through branches and pull requests rather than editing `main` directly.
+สมาชิกทุกคนต้องมี commit ของตัวเองใน repository นี้ (ข้อกำหนดรายวิชา M8) จึงขอให้ทำงานผ่าน branch และ pull request แทนการแก้ `main` โดยตรง
 
-## Workflow
+## ขั้นตอนการทำงาน
 
-1. Pick or create an issue and assign yourself.
-2. Create a branch from `main`:
-   - `feat/<short-name>` — new feature (e.g. `feat/bh1750-driver`)
-   - `fix/<short-name>` — bug fix
-   - `docs/<short-name>` — documentation / report material
-   - `test/<short-name>` — test scripts and measured data
-3. Commit small, focused changes (see message format below).
-4. Make sure both firmware projects build: `pio run -d firmware/sensor_node` and `pio run -d firmware/gateway`.
-5. Open a pull request, fill in the template, link the issue (`Closes #12`) and ask one teammate to review.
-6. Merge after review and a green CI build. Delete the branch.
+1. เลือกหรือสร้าง issue แล้ว assign ให้ตัวเอง
+2. สร้าง branch จาก `main`:
+   - `feat/<ชื่อสั้นๆ>` — ฟีเจอร์ใหม่ (เช่น `feat/bh1750-driver`)
+   - `fix/<ชื่อสั้นๆ>` — แก้บั๊ก
+   - `docs/<ชื่อสั้นๆ>` — เอกสาร / เนื้อหาสำหรับรายงาน
+   - `test/<ชื่อสั้นๆ>` — สคริปต์ทดสอบและข้อมูลที่วัดได้
+3. commit การเปลี่ยนแปลงทีละส่วนเล็กๆ ที่มีจุดประสงค์ชัดเจน (ดูรูปแบบข้อความด้านล่าง)
+4. ตรวจให้แน่ใจว่าเฟิร์มแวร์ทั้งสองโปรเจกต์บิลด์ผ่าน: `pio run -d firmware/sensor_node` และ `pio run -d firmware/gateway`
+5. เปิด pull request กรอก template ลิงก์ issue (`Closes #12`) และขอให้เพื่อนในทีมหนึ่งคนรีวิว
+6. merge หลังได้รับการรีวิวและ CI ผ่าน (สีเขียว) แล้วลบ branch ทิ้ง
 
-## Commit messages
+## ข้อความ commit
 
-Use [Conventional Commits](https://www.conventionalcommits.org/):
+ใช้รูปแบบ [Conventional Commits](https://www.conventionalcommits.org/) (เขียนข้อความ commit เป็นภาษาอังกฤษ):
 
 ```
 feat(gateway): add MQTTS connection to NETPIE
@@ -26,25 +26,25 @@ docs: add wiring diagram for servo rail
 test: log packet delivery rate over 1 h
 ```
 
-Scopes: `node`, `gateway`, `common`, `dashboard`, `docs`, `tests`, `ci`.
+scope ที่ใช้ได้: `node`, `gateway`, `common`, `dashboard`, `docs`, `tests`, `ci`
 
-## Code style
+## รูปแบบโค้ด
 
-- C/C++ is formatted with `.clang-format` (run `clang-format -i <file>` or enable format-on-save in VS Code).
-- No blocking work inside ISRs or ESP-NOW callbacks — enqueue and return.
-- Keep pin numbers in one place (see the pin map in the README).
-- Prefer `constexpr` / `static const` over `#define` for new constants.
+- จัดรูปแบบโค้ด C/C++ ด้วย `.clang-format` (รัน `clang-format -i <ไฟล์>` หรือเปิด format-on-save ใน VS Code)
+- ห้ามทำงานที่บล็อกภายใน ISR หรือ callback ของ ESP-NOW — ให้ใส่คิวแล้ว return ทันที
+- เก็บหมายเลขขาไว้ที่เดียว (ดูผังขาใน [docs/hardware.md](docs/hardware.md))
+- ค่าคงที่ใหม่ให้ใช้ `constexpr` / `static const` แทน `#define`
 
-## Secrets
+## ข้อมูลลับ
 
-Never commit Wi-Fi passwords, NETPIE tokens, API keys or webhook URLs. Put them in `firmware/gateway/include/secrets.h` (git-ignored) and keep `secrets.example.h` up to date with placeholder values. If a secret is committed by mistake, rotate it immediately — deleting the commit is not enough.
+ห้าม commit รหัส Wi-Fi, token ของ NETPIE, API key หรือ URL ของ webhook เด็ดขาด ให้ใส่ไว้ใน `firmware/gateway/include/secrets.h` (git ไม่ติดตามไฟล์นี้) และอัปเดต `secrets.example.h` ด้วยค่าตัวอย่างเสมอ หากเผลอ commit ข้อมูลลับไปแล้ว ให้เปลี่ยนคีย์นั้นทันที — การลบ commit อย่างเดียวไม่พอ
 
-## Ownership
+## ผู้รับผิดชอบ
 
-| Area | Owner |
+| ส่วนงาน | ผู้รับผิดชอบ |
 |---|---|
-| Message format, integration, AI | รชาทัช บุญพัฒน์ |
-| `firmware/sensor_node`, BH1750 driver | ฐากูร นันตสุวรรณ |
-| `firmware/gateway`, NETPIE, INA219 driver | นรินธร ยางงาม |
-| `dashboard/`, Discord alerts | ปุณยวีร์ พัฒนประดิษฐ์ |
-| `tests/`, timeline, filter mechanism | กษิดิศ ประจงการ |
+| รูปแบบข้อความ การรวมระบบ และ AI | รชาทัช บุญพัฒน์ |
+| `firmware/sensor_node`, ไดรเวอร์ BH1750 | ฐากูร นันตสุวรรณ |
+| `firmware/gateway`, NETPIE, ไดรเวอร์ INA219 | นรินธร ยางงาม |
+| `dashboard/`, การแจ้งเตือนผ่าน Discord | ปุณยวีร์ พัฒนประดิษฐ์ |
+| `tests/`, ไทม์ไลน์, กลไกฟิลเตอร์ | กษิดิศ ประจงการ |
