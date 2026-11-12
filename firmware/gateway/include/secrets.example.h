@@ -15,8 +15,10 @@
 #define DISCORD_WEBHOOK  ""
 
 // ---- Root CA certificates (PEM) for TLS verification (E5).
-// Get the root of a server's chain with:
-//   openssl s_client -connect mqtt.netpie.io:1884 -showcerts </dev/null
+// NETPIE: leave NETPIE_CA_PEM empty. The broker uses a private CA that it does not send, so the
+// firmware pins the broker certificate by SHA-256 fingerprint instead (cfg::kMqttCertSha256).
+// Google / Discord: get the root of the chain with
+//   openssl s_client -connect discord.com:443 -showcerts </dev/null
 // and paste the LAST certificate of the chain (the root) between the quotes, one line per
 // PEM line ending in \n. Empty string = TLS without certificate check (development only).
 #define NETPIE_CA_PEM ""
