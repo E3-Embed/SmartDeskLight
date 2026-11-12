@@ -49,7 +49,7 @@ constexpr uint8_t kFirstSimulatedId = 101;
 // ---------------------------------------------------------------- cloud
 constexpr const char *kMqttHost = "mqtt.netpie.io";
 constexpr uint16_t kMqttPort = 1884;     // NETPIE2020 MQTTS
-constexpr uint32_t kShadowPeriodMs = 5000;
+constexpr uint32_t kShadowPeriodMs = 30000;  // NETPIE free tier: ~86k shadow writes/month (quota 500k)
 constexpr uint32_t kAiPeriodMs = 5UL * 60UL * 1000UL;
 constexpr int kBufferSlots = 300;        // store-and-forward: ~5 min of 1 Hz readings (~11 kB)
 constexpr const char *kAiModel = "gemini-2.5-flash";
