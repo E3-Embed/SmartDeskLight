@@ -17,13 +17,13 @@
 
 ## ข้อความ commit
 
-ใช้รูปแบบ [Conventional Commits](https://www.conventionalcommits.org/) (เขียนข้อความ commit เป็นภาษาอังกฤษ):
+ใช้รูปแบบ [Conventional Commits](https://www.conventionalcommits.org/) โดยคำนำหน้า (`feat`, `fix`, `docs`, `test`) และ scope เป็นภาษาอังกฤษ ส่วนคำอธิบายเขียนเป็นภาษาไทยได้:
 
 ```
-feat(gateway): add MQTTS connection to NETPIE
-fix(node): retry ESP-NOW send when ACK times out
-docs: add wiring diagram for servo rail
-test: log packet delivery rate over 1 h
+feat(gateway): เชื่อมต่อ NETPIE ผ่าน MQTTS
+fix(node): ส่ง ESP-NOW ซ้ำเมื่อรอ ACK ไม่ทัน
+docs: เพิ่มผังการเดินสายรางไฟเซอร์โว
+test: บันทึกอัตราการส่งแพ็กเก็ตสำเร็จตลอด 1 ชั่วโมง
 ```
 
 scope ที่ใช้ได้: `node`, `gateway`, `common`, `dashboard`, `docs`, `tests`, `ci`
