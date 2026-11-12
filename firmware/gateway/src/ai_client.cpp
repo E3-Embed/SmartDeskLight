@@ -60,14 +60,17 @@ bool requestProfile(const Context &ctx, app::Profile &out) {
   JsonDocument req;
   req["contents"][0]["parts"][0]["text"] = String(kPrompt) + buildSituation(ctx);
   req["generationConfig"]["responseMimeType"] = "application/json";
-  req["generationConfig"]["temperature"] = 0.2;
+  // Gemini 3.x: sampling parameters (temperature, top_p) are deprecated; a low thinking level keeps
+  // the answer fast enough for the 10 s timeout.
+  req["generationConfig"]["thinkingConfig"]["thinkingLevel"] = "low";
   String body;
   serializeJson(req, body);
 
   uint32_t t0 = millis();
   int code = http.POST(body);
   if (code != 200) {
-    Serial.printf("[ai] HTTP %d\n", code);
+    // 503 = model busy, 429 = quota: the rule-based profile stays and the next period retries.
+    Serial.printf("[ai] HTTP %d %s\n", code, http.getString().substring(0, 160).c_str());
     http.end();
     return false;
   }
@@ -76,7 +79,13 @@ bool requestProfile(const Context &ctx, app::Profile &out) {
 
   JsonDocument resp;
   if (deserializeJson(resp, payload)) return false;
-  const char *text = resp["candidates"][0]["content"]["parts"][0]["text"];
+  // Take the first answer part; skip thought parts if the model returns any.
+  const char *text = nullptr;
+  for (JsonObject part : resp["candidates"][0]["content"]["parts"].as<JsonArray>()) {
+    if (part["thought"] | false) continue;
+    text = part["text"];
+    if (text) break;
+  }
   if (!text) return false;
 
   JsonDocument ans;
