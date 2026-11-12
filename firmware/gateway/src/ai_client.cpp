@@ -4,6 +4,7 @@
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 
+#include "ca_bundle.h"
 #include "secrets.h"
 
 namespace ai {
@@ -43,11 +44,11 @@ bool requestProfile(const Context &ctx, app::Profile &out) {
   if (strlen(LLM_API_KEY) == 0) return false;
 
   WiFiClientSecure tls;
-  if (strlen(GOOGLE_API_CA_PEM) > 0) {
-    tls.setCACert(GOOGLE_API_CA_PEM);
-  } else {
-    tls.setInsecure();  // development only: fill GOOGLE_API_CA_PEM in secrets.h
-  }
+#if defined(ALLOW_INSECURE_TLS)
+  tls.setInsecure();  // development only: build with -DALLOW_INSECURE_TLS
+#else
+  ca::useBuiltin(tls);  // Google's chain is publicly trusted
+#endif
 
   HTTPClient http;
   String url = String("https://generativelanguage.googleapis.com/v1beta/models/") +
