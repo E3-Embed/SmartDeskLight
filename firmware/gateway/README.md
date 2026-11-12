@@ -1,98 +1,98 @@
-# Gateway firmware (ESP32 B)
+# เฟิร์มแวร์เกตเวย์ (ESP32 B)
 
-Owner: นรินธร ยางงาม — Embedded Developer (Gateway & Cloud)
+ผู้รับผิดชอบ: นรินธร ยางงาม — Embedded Developer (Gateway & Cloud)
 
-The gateway receives readings from the sensor nodes over ESP-NOW, reads its own sensors, runs the closed-loop lamp control, and talks to NETPIE2020, the LLM API and Discord.
+เกตเวย์รับค่าจากโหนดเซนเซอร์ผ่าน ESP-NOW อ่านเซนเซอร์ของตัวเอง ควบคุมโคมไฟแบบวงปิด และสื่อสารกับ NETPIE2020, LLM API และ Discord
 
-## Tasks
+## Task
 
-| Task | Priority | Core | File | Job |
+| Task | Priority | Core | ไฟล์ | หน้าที่ |
 |---|:-:|:-:|---|---|
-| `ControlTask` | 4 | 1 | `src/control.cpp` | Stop button events, safe state, closed loop on measured lux (filters + PWM) |
-| `EspNowRxTask` | 3 | 1 | `src/espnow_link.cpp` | Drain ESP-NOW packets, de-duplicate by `(node_id, seq)`, node table |
-| `SensorTask` | 2 | 1 | `src/sensors.cpp` | VL53L0X distance, PIR presence, INA219 power every 200 ms |
-| `CloudTask` | 1 | 0 | `src/cloud.cpp` | Wi-Fi, NETPIE MQTTS, store-and-forward, shadow, commands, AI, alerts |
-| `loop()` | 1 | 1 | `src/main.cpp` | Status LED (solid = cloud up, blinking = offline) |
+| `ControlTask` | 4 | 1 | `src/control.cpp` | เหตุการณ์ปุ่มหยุด, สถานะปลอดภัย, ควบคุมแบบวงปิดจาก lux ที่วัดได้ (ฟิลเตอร์ + PWM) |
+| `EspNowRxTask` | 3 | 1 | `src/espnow_link.cpp` | ดึงแพ็กเก็ต ESP-NOW, ตัดแพ็กเก็ตซ้ำด้วย `(node_id, seq)`, ตารางโหนด |
+| `SensorTask` | 2 | 1 | `src/sensors.cpp` | อ่านระยะ VL53L0X, การมีคนอยู่จาก PIR และกำลังไฟจาก INA219 ทุก 200 ms |
+| `CloudTask` | 1 | 0 | `src/cloud.cpp` | Wi-Fi, NETPIE MQTTS, เก็บแล้วส่งต่อ, shadow, คำสั่ง, AI, การแจ้งเตือน |
+| `loop()` | 1 | 1 | `src/main.cpp` | LED สถานะ (ติดค้าง = เชื่อมคลาวด์ได้, กะพริบ = ออฟไลน์) |
 
-**Why these priorities:** safety and control must never wait for the network, so `ControlTask` is highest. `EspNowRxTask` is next so the 32-slot radio queue never overflows. Sensors are periodic and slow. Cloud work (TLS, HTTP) can block for seconds, so it is lowest and runs alone on core 0.
+**เหตุผลของ priority:** ความปลอดภัยและการควบคุมต้องไม่รอเครือข่าย `ControlTask` จึงสูงสุด รองลงมาคือ `EspNowRxTask` เพื่อไม่ให้คิววิทยุ 32 ช่องล้น เซนเซอร์อ่านเป็นรอบและไม่เร่งด่วน ส่วนงานคลาวด์ (TLS, HTTP) อาจบล็อกได้หลายวินาที จึงต่ำสุดและแยกไปทำงานบน core 0 ตัวเดียว
 
-**How tasks communicate (E1):**
+**การสื่อสารระหว่าง task (E1):**
 
-| Mechanism | From → to | Carries |
+| กลไก | จาก → ไป | ข้อมูลที่ส่ง |
 |---|---|---|
-| `qTelemetry` queue | ESP-NOW callback → EspNowRxTask | `SdlTelemetry` packets |
-| `qCloud` queue | EspNowRxTask → CloudTask | new readings + receive time |
-| `qControl` queue | stop ISR, CloudTask → ControlTask | stop, mode, feedback, new AI profile |
-| `qAlerts` queue | any task → CloudTask | alert text for Discord / NETPIE |
-| `events` event group | CloudTask ↔ others | Wi-Fi up, MQTT up, "AI profile requested" |
-| `stateMutex` mutex | all tasks | shared `app::state` (via `StateLock`) |
+| คิว `qTelemetry` | callback ของ ESP-NOW → EspNowRxTask | แพ็กเก็ต `SdlTelemetry` |
+| คิว `qCloud` | EspNowRxTask → CloudTask | ค่าที่อ่านใหม่ + เวลาที่ได้รับ |
+| คิว `qControl` | ISR ปุ่มหยุด, CloudTask → ControlTask | หยุด, โหมด, feedback, โปรไฟล์ใหม่จาก AI |
+| คิว `qAlerts` | ทุก task → CloudTask | ข้อความแจ้งเตือนสำหรับ Discord / NETPIE |
+| event group `events` | CloudTask ↔ task อื่น | Wi-Fi พร้อม, MQTT พร้อม, "ขอโปรไฟล์จาก AI" |
+| mutex `stateMutex` | ทุก task | `app::state` ที่ใช้ร่วมกัน (ผ่าน `StateLock`) |
 
-## Files
+## ไฟล์
 
-| File | Purpose |
+| ไฟล์ | หน้าที่ |
 |---|---|
-| `src/config.h` | Pins, timings, control gains, NETPIE topics — the only place to change them |
-| `src/app.h/.cpp` | Shared types, queues, mutex, event group, `raiseAlert()` |
-| `src/ina219.h/.cpp` | **Own INA219 driver** at register level (E8) |
-| `src/lamp.h/.cpp` | Servo filters (limits, rate limit, detach timeout) and LED PWM |
-| `src/espnow_link.h/.cpp` | ESP-NOW receive + ACK, node table, simulated nodes |
+| `src/config.h` | ขา, เวลา, ค่าเกนการควบคุม, topic ของ NETPIE — แก้ค่าเหล่านี้ที่นี่ที่เดียว |
+| `src/app.h/.cpp` | ชนิดข้อมูลที่ใช้ร่วมกัน, คิว, mutex, event group, `raiseAlert()` |
+| `src/ina219.h/.cpp` | **ไดรเวอร์ INA219 ที่เขียนเอง** ระดับรีจิสเตอร์ (E8) |
+| `src/lamp.h/.cpp` | เซอร์โวฟิลเตอร์ (จำกัดมุม, จำกัดความถี่, timeout ปลด servo) และ PWM ของ LED |
+| `src/espnow_link.h/.cpp` | รับ ESP-NOW + ตอบ ACK, ตารางโหนด, โหนดจำลอง |
 | `src/sensors.h/.cpp` | SensorTask |
-| `src/control.h/.cpp` | ControlTask, rule-based profiles, AI output clamping |
-| `src/ai_client.h/.cpp` | Gemini API request / JSON parsing |
-| `src/cloud.h/.cpp` | CloudTask: MQTTS, backlog, shadow, commands, Discord |
-| `src/ring_buffer.h` | Fixed-size FIFO for store-and-forward |
+| `src/control.h/.cpp` | ControlTask, โปรไฟล์ตามกฎ, จำกัดค่าที่ได้จาก AI |
+| `src/ai_client.h/.cpp` | ส่งคำขอไปยัง Gemini API และแปลง JSON |
+| `src/cloud.h/.cpp` | CloudTask: MQTTS, backlog, shadow, คำสั่ง, Discord |
+| `src/ring_buffer.h` | FIFO ขนาดคงที่สำหรับเก็บแล้วส่งต่อ |
 
-## Control loop
+## ลูปควบคุม
 
-Every 200 ms `ControlTask`:
+ทุก 200 ms `ControlTask` จะ:
 
-1. Handles queued events (stop button toggles the safe state; mode / feedback / AI profile update the target).
-2. **Safe state** (stop pressed) → filters folded out, LED at medium, nothing else moves.
-3. **Sensor fault** (no packet from node 1 for 10 s) → safe brightness + Discord alert; resumes automatically.
-4. **Desk empty** (no PIR motion for 5 min) → LED off; AI is asked again when someone returns.
-5. Otherwise: moves filters to the profile (max one change per 10 s), then a proportional step on PWM: `pwm += clamp(Kp × (target − lux), ±12)`, holding when the error is within ±7 % of the target.
-6. If PWM saturates and the target is still not reached, the ND filter is flipped — the physical actuator extends the range PWM alone cannot cover.
+1. จัดการเหตุการณ์ในคิว (ปุ่มหยุดสลับสถานะปลอดภัย; โหมด / feedback / โปรไฟล์จาก AI เปลี่ยนค่าเป้าหมาย)
+2. **สถานะปลอดภัย** (กดปุ่มหยุด) → พับฟิลเตอร์ออก, LED ระดับกลาง, ไม่ขยับอย่างอื่น
+3. **เซนเซอร์ขัดข้อง** (ไม่มีแพ็กเก็ตจากโหนด 1 นาน 10 วินาที) → ความสว่างระดับปลอดภัย + แจ้งเตือน Discord แล้วกลับมาทำงานเองเมื่อมีข้อมูล
+4. **ไม่มีคนที่โต๊ะ** (PIR ไม่ตรวจพบการเคลื่อนไหว 5 นาที) → ปิด LED และขอโปรไฟล์จาก AI ใหม่เมื่อมีคนกลับมา
+5. กรณีปกติ: ขยับฟิลเตอร์ตามโปรไฟล์ (เปลี่ยนได้สูงสุดครั้งละหนึ่งแผ่นทุก 10 วินาที) แล้วปรับ PWM แบบ proportional: `pwm += clamp(Kp × (target − lux), ±12)` และคงค่าไว้เมื่อค่าคลาดเคลื่อนอยู่ในช่วง ±7 % ของเป้าหมาย
+6. ถ้า PWM ถึงขีดสุดแล้วยังไม่ถึงเป้าหมาย จะสลับฟิลเตอร์ ND — แอคชูเอเตอร์เชิงกลช่วยขยายช่วงที่ PWM อย่างเดียวทำไม่ได้
 
-The AI only proposes `target_lux`, `target_cct` and a filter set; `control::sanitize()` clamps it to 200–750 lux. If the AI is unreachable the rule-based profile (`control::ruleProfile()`) stays active.
+AI เสนอแค่ `target_lux`, `target_cct` และชุดฟิลเตอร์ ส่วน `control::sanitize()` จำกัดค่าให้อยู่ในช่วง 200–750 lux หากติดต่อ AI ไม่ได้ จะใช้โปรไฟล์ตามกฎ (`control::ruleProfile()`) ต่อไป
 
-## Embedded Engineering Depth in this firmware
+## Embedded Engineering Depth ในเฟิร์มแวร์นี้
 
-| Item | Where | What to show in the demo |
+| หัวข้อ | อยู่ที่ | สิ่งที่ต้องแสดงตอนเดโม |
 |---|---|---|
-| E1 RTOS | `main.cpp`, `app.h` | Four tasks, priorities, queues, mutex, event group |
-| E2 Interrupt | `main.cpp` `onStopButton()` | ISR only debounces and posts an event; `ControlTask` does the work |
-| E4 Reliable comms | `espnow_link.cpp`, `cloud.cpp`, `ring_buffer.h` | ACK + duplicate counter; unplug Wi-Fi, readings buffer (`buffered` in shadow), then flush in order |
-| E5 Security | `cloud.cpp` `task()` | MQTTS on port 1884 with `setCACert(NETPIE_CA_PEM)`; secrets only in git-ignored `secrets.h` |
-| E8 Own driver | `ina219.cpp` | Calibration math, register reads; compare with a multimeter / logic analyzer |
+| E1 RTOS | `main.cpp`, `app.h` | 4 task, priority, queue, mutex, event group |
+| E2 Interrupt | `main.cpp` `onStopButton()` | ISR ทำแค่ debounce และส่งเหตุการณ์ ส่วน `ControlTask` เป็นผู้ทำงานจริง |
+| E4 Reliable comms | `espnow_link.cpp`, `cloud.cpp`, `ring_buffer.h` | ACK + ตัวนับแพ็กเก็ตซ้ำ; ถอด Wi-Fi แล้วค่าจะถูกเก็บในบัฟเฟอร์ (`buffered` ใน shadow) จากนั้นส่งต่อตามลำดับ |
+| E5 Security | `cloud.cpp` `task()` | MQTTS พอร์ต 1884 พร้อม `setCACert(NETPIE_CA_PEM)`; ข้อมูลลับอยู่ใน `secrets.h` ที่ git ไม่ติดตามเท่านั้น |
+| E8 Own driver | `ina219.cpp` | คณิตศาสตร์การ calibrate, การอ่านรีจิสเตอร์; เทียบกับมัลติมิเตอร์ / logic analyzer |
 
-## Setup
+## การตั้งค่า
 
-1. **NETPIE2020:** create a device, copy Client ID / Token / Secret into `include/secrets.h` (copy from `secrets.example.h`).
-2. **Root CA (E5):** `openssl s_client -connect mqtt.netpie.io:1884 -showcerts </dev/null`, paste the root certificate into `NETPIE_CA_PEM`. With an empty string the firmware still connects but prints a warning and does **not** verify the certificate.
-3. **AI:** put a Gemini API key in `LLM_API_KEY` (empty = rule-based only). The model name is `cfg::kAiModel`.
-4. **Discord:** create a channel webhook and put the URL in `DISCORD_WEBHOOK`.
-5. **Sensor node channel:** ESP-NOW only works when the node uses the same Wi-Fi channel as the gateway. The gateway prints `[espnow] ready, MAC …, channel N` at boot — the node must call `esp_wifi_set_channel(N, WIFI_SECOND_CHAN_NONE)` and use this MAC as `GATEWAY_MAC`.
-6. Build and flash: `pio run -d firmware/gateway -t upload && pio device monitor -d firmware/gateway`.
+1. **NETPIE2020:** สร้าง device แล้วคัดลอก Client ID / Token / Secret ไปใส่ใน `include/secrets.h` (คัดลอกจาก `secrets.example.h`)
+2. **Root CA (E5):** รัน `openssl s_client -connect mqtt.netpie.io:1884 -showcerts </dev/null` แล้วนำใบรับรอง root ไปใส่ใน `NETPIE_CA_PEM` ถ้าเว้นว่าง เฟิร์มแวร์ยังเชื่อมต่อได้แต่จะพิมพ์คำเตือน และ**ไม่**ตรวจสอบใบรับรอง
+3. **AI:** ใส่ Gemini API key ใน `LLM_API_KEY` (เว้นว่าง = ใช้โปรไฟล์ตามกฎอย่างเดียว) ชื่อโมเดลอยู่ที่ `cfg::kAiModel`
+4. **Discord:** สร้าง webhook ของช่องแชตแล้วใส่ URL ใน `DISCORD_WEBHOOK`
+5. **ช่องสัญญาณของโหนดเซนเซอร์:** ESP-NOW ทำงานได้เมื่อโหนดใช้ช่อง Wi-Fi เดียวกับเกตเวย์ ตอนบูตเกตเวย์จะพิมพ์ `[espnow] ready, MAC …, channel N` — โหนดต้องเรียก `esp_wifi_set_channel(N, WIFI_SECOND_CHAN_NONE)` และใช้ MAC นี้เป็น `GATEWAY_MAC`
+6. บิลด์และแฟลช: `pio run -d firmware/gateway -t upload && pio device monitor -d firmware/gateway`
 
-### NETPIE topics
+### Topic ของ NETPIE
 
-| Topic | Direction | Payload |
+| Topic | ทิศทาง | ข้อมูล |
 |---|---|---|
-| `@msg/sdl/N<id>/telemetry` | gateway → cloud | one reading: `node_id, seq, ts, node_ms, lux, r, g, b, c, cct` |
-| `@shadow/data/update` | gateway → cloud, every 30 s | `n1_lux, n1_cct, n1_rx, n1_seq, dist_mm, presence, lamp_mW, diffuser, nd, warm, pwm, safe, mode, target_lux, ai, buffered, dropped, heap, uptime_s` |
-| `@msg/sdl/cmd` | dashboard → gateway | `{"mode":"coding"}` or `{"feedback":"too_bright"}` / `"too_dim"` |
-| `@msg/sdl/alert` | gateway → cloud | alert text (also sent to Discord) |
+| `@msg/sdl/N<id>/telemetry` | เกตเวย์ → คลาวด์ | ค่าที่อ่านได้หนึ่งชุด: `node_id, seq, ts, node_ms, lux, r, g, b, c, cct` |
+| `@shadow/data/update` | เกตเวย์ → คลาวด์ ทุก 30 วินาที | `n1_lux, n1_cct, n1_rx, n1_seq, dist_mm, presence, lamp_mW, diffuser, nd, warm, pwm, safe, mode, target_lux, ai, buffered, dropped, heap, uptime_s` |
+| `@msg/sdl/cmd` | แดชบอร์ด → เกตเวย์ | `{"mode":"coding"}` หรือ `{"feedback":"too_bright"}` / `"too_dim"` |
+| `@msg/sdl/alert` | เกตเวย์ → คลาวด์ | ข้อความแจ้งเตือน (ส่งเข้า Discord ด้วย) |
 
-### NETPIE project
+### โปรเจกต์บน NETPIE
 
-Project `SmartDeskLight`, group `sdl-group`, devices `gateway` (this firmware) and `dashboard` (the dashboard client that publishes `@msg/sdl/cmd`). The `gateway` device has a schema with Feed enabled for `n1_lux, n1_cct, lamp_mW, pwm, target_lux, dist_mm, presence, buffered` (all numbers); other shadow fields are kept in the shadow but not stored in the Feed. At one shadow update every 30 s this stays well inside the free quota.
+Project `SmartDeskLight`, group `sdl-group`, device `gateway` (เฟิร์มแวร์นี้) และ `dashboard` (ฝั่งแดชบอร์ดที่ publish `@msg/sdl/cmd`) device `gateway` มี schema ที่เปิด Feed ไว้สำหรับ `n1_lux, n1_cct, lamp_mW, pwm, target_lux, dist_mm, presence, buffered` (เป็นตัวเลขทั้งหมด) ฟิลด์อื่นยังอยู่ใน shadow แต่ไม่ถูกเก็บลง Feed การอัปเดต shadow ทุก 30 วินาทีอยู่ในโควตาฟรีอย่างสบาย
 
-### Metrics you can read from the shadow
+### ตัวชี้วัดที่อ่านได้จาก shadow
 
-- **Packet delivery rate:** `n1_rx / n1_seq` (unique packets received ÷ packets the node sent).
-- **Uptime:** `uptime_s`; **power per mode:** `lamp_mW` with `mode`, `pwm` and filter fields.
-- **Store-and-forward:** `buffered` rises while offline and falls back to 0 after reconnecting; `dropped` must stay 0 for outages under ~5 min.
+- **อัตราการส่งแพ็กเก็ตสำเร็จ:** `n1_rx / n1_seq` (จำนวนแพ็กเก็ตไม่ซ้ำที่ได้รับ ÷ จำนวนที่โหนดส่ง)
+- **Uptime:** `uptime_s`; **กำลังไฟแต่ละโหมด:** `lamp_mW` คู่กับ `mode`, `pwm` และฟิลด์ฟิลเตอร์
+- **เก็บแล้วส่งต่อ:** `buffered` เพิ่มขึ้นขณะออฟไลน์ และลดลงเหลือ 0 หลังเชื่อมต่อได้อีกครั้ง ส่วน `dropped` ต้องเป็น 0 เมื่อขาดการเชื่อมต่อไม่เกินราว 5 นาที
 
-### Scalability test
+### ทดสอบการขยายระบบ
 
-Set `cfg::kSimulatedNodes = 2` in `config.h` to add simulated nodes 101 and 102 next to the physical node 1; each appears as its own `N<id>` topic and `n<id>_*` shadow fields.
+ตั้ง `cfg::kSimulatedNodes = 2` ใน `config.h` เพื่อเพิ่มโหนดจำลอง 101 และ 102 คู่กับโหนดจริง 1 แต่ละโหนดจะมี topic `N<id>` และฟิลด์ `n<id>_*` ใน shadow เป็นของตัวเอง
