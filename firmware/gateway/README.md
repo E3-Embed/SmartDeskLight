@@ -62,13 +62,14 @@ AI เสนอแค่ `target_lux`, `target_cct` และชุดฟิล�
 | E1 RTOS | `main.cpp`, `app.h` | 4 task, priority, queue, mutex, event group |
 | E2 Interrupt | `main.cpp` `onStopButton()` | ISR ทำแค่ debounce และส่งเหตุการณ์ ส่วน `ControlTask` เป็นผู้ทำงานจริง |
 | E4 Reliable comms | `espnow_link.cpp`, `cloud.cpp`, `ring_buffer.h` | ACK + ตัวนับแพ็กเก็ตซ้ำ; ถอด Wi-Fi แล้วค่าจะถูกเก็บในบัฟเฟอร์ (`buffered` ใน shadow) จากนั้นส่งต่อตามลำดับ |
-| E5 Security | `cloud.cpp` `task()` | MQTTS พอร์ต 1884 พร้อม `setCACert(NETPIE_CA_PEM)`; ข้อมูลลับอยู่ใน `secrets.h` ที่ git ไม่ติดตามเท่านั้น |
+| E5 Security | `cloud.cpp` `ensureMqtt()` | MQTTS พอร์ต 1884 ตรวจใบรับรองของ broker ด้วย SHA-256 fingerprint (`cfg::kMqttCertSha256`) **ก่อน**ส่ง token; ข้อมูลลับอยู่ใน `secrets.h` ที่ git ไม่ติดตามเท่านั้น |
 | E8 Own driver | `ina219.cpp` | คณิตศาสตร์การ calibrate, การอ่านรีจิสเตอร์; เทียบกับมัลติมิเตอร์ / logic analyzer |
 
 ## การตั้งค่า
 
 1. **NETPIE2020:** สร้าง device แล้วคัดลอก Client ID / Token / Secret ไปใส่ใน `include/secrets.h` (คัดลอกจาก `secrets.example.h`)
-2. **Root CA (E5):** รัน `openssl s_client -connect mqtt.netpie.io:1884 -showcerts </dev/null` แล้วนำใบรับรอง root ไปใส่ใน `NETPIE_CA_PEM` ถ้าเว้นว่าง เฟิร์มแวร์ยังเชื่อมต่อได้แต่จะพิมพ์คำเตือน และ**ไม่**ตรวจสอบใบรับรอง
+2. **ตรวจใบรับรอง NETPIE (E5):** broker ของ NETPIE ส่งมาแค่ใบรับรองของตัวเอง (CN `*.netpie.io`) ซึ่งเซ็นโดย CA ภายในชื่อ "NEXPIE Device Broker" ที่ไม่ได้ส่งมาด้วย จึงใช้ `setCACert()` ไม่ได้ เฟิร์มแวร์เลย**ปักหมุด (pin) ใบรับรอง**ด้วย SHA-256 fingerprint ใน `cfg::kMqttCertSha256` แทน — เปิด TLS แล้วเทียบ fingerprint และชื่อโดเมนก่อน ถ้าไม่ตรงจะตัดการเชื่อมต่อ แจ้งเตือน และไม่ส่ง token ออกไป ปล่อย `NETPIE_CA_PEM` ว่างไว้ ถ้า NETPIE เปลี่ยนใบรับรอง (ใบปัจจุบันหมดอายุ 12 ก.ย. 2036) ให้ดู fingerprint ใหม่ด้วย
+   `openssl s_client -connect mqtt.netpie.io:1884 </dev/null | openssl x509 -noout -fingerprint -sha256`
 3. **AI:** ใส่ Gemini API key ใน `LLM_API_KEY` (เว้นว่าง = ใช้โปรไฟล์ตามกฎอย่างเดียว) ชื่อโมเดลอยู่ที่ `cfg::kAiModel`
 4. **Discord:** สร้าง webhook ของช่องแชตแล้วใส่ URL ใน `DISCORD_WEBHOOK`
 5. **ช่องสัญญาณของโหนดเซนเซอร์:** ESP-NOW ทำงานได้เมื่อโหนดใช้ช่อง Wi-Fi เดียวกับเกตเวย์ ตอนบูตเกตเวย์จะพิมพ์ `[espnow] ready, MAC …, channel N` — โหนดต้องเรียก `esp_wifi_set_channel(N, WIFI_SECOND_CHAN_NONE)` และใช้ MAC นี้เป็น `GATEWAY_MAC`
