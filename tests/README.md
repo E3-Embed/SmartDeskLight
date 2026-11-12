@@ -1,14 +1,14 @@
-# Test plan and results
+# แผนการทดสอบและผลลัพธ์
 
-Repeat each measurement ≥ 10 times and report mean / min / max.
+วัดแต่ละรายการซ้ำ ≥ 10 ครั้ง และรายงานค่าเฉลี่ย / ต่ำสุด / สูงสุด
 
-| Metric | Method | Result |
+| ตัวชี้วัด | วิธีวัด | ผลลัพธ์ |
 |---|---|---|
-| BH1750 accuracy | compare with reference lux meter at 5 light levels | |
-| End-to-end latency | sensor → actuator, sensor → dashboard (timestamps) | |
-| Packet delivery rate | node seq vs gateway received, with retries | |
-| Lamp power | INA219 per mode | |
-| AI accuracy | % recommendations accepted without change | |
-| Uptime | continuous run ≥ 24 h | |
+| ความแม่นยำของ BH1750 | เทียบกับเครื่องวัดแสงอ้างอิงที่ 5 ระดับแสง | |
+| ความหน่วงตลอดเส้นทาง | เซนเซอร์ → แอคชูเอเตอร์, เซนเซอร์ → แดชบอร์ด (จาก timestamp) | |
+| อัตราการส่งแพ็กเก็ตสำเร็จ | seq ของโหนด เทียบกับที่เกตเวย์ได้รับ (รวมการส่งซ้ำ) | |
+| กำลังไฟของโคม | ค่าจาก INA219 ในแต่ละโหมด | |
+| ความแม่นยำของ AI | % คำแนะนำที่ยอมรับโดยไม่ต้องแก้ | |
+| Uptime | ทำงานต่อเนื่อง ≥ 24 ชั่วโมง | |
 
-Failure tests: Wi-Fi loss, sensor unplugged, power loss + recovery, node lost → alert.
+การทดสอบกรณีขัดข้อง: Wi-Fi หลุด, ถอดเซนเซอร์, ไฟดับ + กู้คืน, โหนดหาย → แจ้งเตือน
