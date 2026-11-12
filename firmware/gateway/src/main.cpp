@@ -1,102 +1,80 @@
 // SmartDeskLight — Gateway (ESP32 B)
-// FreeRTOS tasks (E1): ControlTask > EspNowRxTask > SensorTask > CloudTask
+//
+// FreeRTOS tasks (E1), highest priority first:
+//   ControlTask   P4  core 1  safety + closed-loop control of filters and LED      control.cpp
+//   EspNowRxTask  P3  core 1  drain ESP-NOW packets, de-duplicate, node table      espnow_link.cpp
+//   SensorTask    P2  core 1  VL53L0X, PIR, INA219 (own driver, E8)              sensors.cpp
+//   CloudTask     P1  core 0  NETPIE MQTTS (E5), store-and-forward (E4), AI, alerts  cloud.cpp
+// The stop button is an interrupt (E2): the ISR only posts an event to ControlTask.
 #include <Arduino.h>
 #include <WiFi.h>
-#include <esp_now.h>
-#include "message.h"
-#include "secrets.h"   // copy include/secrets.example.h -> include/secrets.h
 
-// Pin map — see README
-static const int STOP_BUTTON_PIN = 4;   // INPUT_PULLUP, active low
-static const int PIR_PIN         = 34;  // input-only
-static const int SERVO_PINS[3]   = {25, 26, 27};  // diffuser, ND, warm/CTO
-static const int LED_PWM_PIN     = 18;  // LED driver dimming input
+#include "app.h"
+#include "cloud.h"
+#include "control.h"
+#include "espnow_link.h"
+#include "lamp.h"
+#include "secrets.h"  // copy include/secrets.example.h -> include/secrets.h
+#include "sensors.h"
 
-static QueueHandle_t qTelemetry;  // EspNowRx -> Control / Cloud
-static QueueHandle_t qEvents;     // ISR / tasks -> Control
+namespace {
 
-enum EventType : uint8_t { EVT_STOP_BUTTON = 1, EVT_NEW_PROFILE = 2 };
+// E2: falling edge on the stop button. Debounced in the ISR; work is deferred to ControlTask.
+void IRAM_ATTR onStopButton() {
+  static uint32_t lastMs = 0;
+  uint32_t now = millis();
+  if (now - lastMs < 250) return;
+  lastMs = now;
 
-// ---- ESP-NOW receive callback: just queue + ACK, no heavy work here ----
-// Arduino-ESP32 3.x (ESP-IDF 5) changed the ESP-NOW receive callback signature
-#if ESP_ARDUINO_VERSION_MAJOR >= 3
-static void onRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
-  const uint8_t *mac = info->src_addr;
-#else
-static void onRecv(const uint8_t *mac, const uint8_t *data, int len) {
-#endif
-  if (len != sizeof(SdlTelemetry)) return;
-  if (!esp_now_is_peer_exist(mac)) {  // ACK needs the node registered as a peer
-    esp_now_peer_info_t peer = {};
-    memcpy(peer.peer_addr, mac, 6);
-    esp_now_add_peer(&peer);
-  }
-  SdlTelemetry pkt;
-  memcpy(&pkt, data, sizeof(pkt));
-  SdlAck ack = {SDL_PROTO_VERSION, SDL_MSG_ACK, pkt.node_id, pkt.seq};
-  esp_now_send(mac, (const uint8_t *)&ack, sizeof(ack));
-  xQueueSend(qTelemetry, &pkt, 0);
-}
-
-// ---- E2: ISR only posts an event (deferred processing) ----
-static void IRAM_ATTR onStopButton() {
-  uint8_t evt = EVT_STOP_BUTTON;
+  app::ControlEvent ev{};
+  ev.type = app::EventType::StopButton;
   BaseType_t woken = pdFALSE;
-  xQueueSendFromISR(qEvents, &evt, &woken);
+  xQueueSendFromISR(app::qControl, &ev, &woken);
   portYIELD_FROM_ISR(woken);
 }
 
-static void ControlTask(void *) {
-  for (;;) {
-    uint8_t evt;
-    if (xQueueReceive(qEvents, &evt, pdMS_TO_TICKS(50)) == pdTRUE) {
-      if (evt == EVT_STOP_BUTTON) { /* TODO: stop servos, enter safe state */ }
-    }
-    // TODO: closed-loop control: compare measured lux with target, move filters / PWM
-  }
-}
-
-static void EspNowRxTask(void *) {
-  for (;;) {
-    SdlTelemetry pkt;
-    if (xQueueReceive(qTelemetry, &pkt, portMAX_DELAY) == pdTRUE) {
-      // TODO: dedupe by (node_id, seq), update per-node state, forward to cloud buffer
-    }
-  }
-}
-
-static void SensorTask(void *) {
-  for (;;) {
-    // TODO: read VL53L0X, PIR, INA219 (own driver)
-    vTaskDelay(pdMS_TO_TICKS(200));
-  }
-}
-
-static void CloudTask(void *) {
-  for (;;) {
-    // TODO: MQTTS to NETPIE (mqtt.netpie.io:1884), store-and-forward ring buffer (E4),
-    //       call LLM API over HTTPS, send Discord alerts
-    vTaskDelay(pdMS_TO_TICKS(1000));
-  }
-}
+}  // namespace
 
 void setup() {
   Serial.begin(115200);
-  qTelemetry = xQueueCreate(32, sizeof(SdlTelemetry));
-  qEvents = xQueueCreate(8, sizeof(uint8_t));
+  delay(200);
+  Serial.println("\nSmartDeskLight gateway starting");
 
+  app::init();
+  pinMode(cfg::kPinStatusLed, OUTPUT);
+
+  lamp::begin();     // filters out, LED off: known state before anything else runs
+  sensors::begin();
+
+  // Wi-Fi first: ESP-NOW then runs on the access point's channel.
   WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);  // keep the radio awake for ESP-NOW
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  if (esp_now_init() != ESP_OK) { Serial.println("ESP-NOW init failed"); ESP.restart(); }
-  esp_now_register_recv_cb(onRecv);
+  for (int i = 0; i < 40 && WiFi.status() != WL_CONNECTED; i++) delay(250);  // up to 10 s
+  if (!espnow_link::begin()) {
+    Serial.println("ESP-NOW init failed, restarting");
+    ESP.restart();
+  }
 
-  pinMode(STOP_BUTTON_PIN, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(STOP_BUTTON_PIN), onStopButton, FALLING);
+  pinMode(cfg::kPinStopButton, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(cfg::kPinStopButton), onStopButton, FALLING);
 
-  xTaskCreatePinnedToCore(ControlTask,  "control", 4096, nullptr, 4, nullptr, 1);
-  xTaskCreatePinnedToCore(EspNowRxTask, "espnow",  4096, nullptr, 3, nullptr, 1);
-  xTaskCreatePinnedToCore(SensorTask,   "sensor",  4096, nullptr, 2, nullptr, 1);
-  xTaskCreatePinnedToCore(CloudTask,    "cloud",   8192, nullptr, 1, nullptr, 0);
+  xTaskCreatePinnedToCore(control::task, "control", 4096, nullptr, 4, nullptr, 1);
+  xTaskCreatePinnedToCore(espnow_link::rxTask, "espnow", 4096, nullptr, 3, nullptr, 1);
+  xTaskCreatePinnedToCore(sensors::task, "sensor", 4096, nullptr, 2, nullptr, 1);
+  xTaskCreatePinnedToCore(cloud::task, "cloud", 12288, nullptr, 1, nullptr, 0);  // TLS needs stack
+  if (cfg::kSimulatedNodes > 0) {
+    xTaskCreatePinnedToCore(espnow_link::simulatorTask, "sim", 3072, nullptr, 1, nullptr, 1);
+  }
 }
 
-void loop() { vTaskDelete(nullptr); }
+// Arduino loop (priority 1): status LED only. Solid = cloud up, blinking = offline.
+void loop() {
+  bool cloudUp;
+  {
+    app::StateLock lock;
+    cloudUp = app::state.cloudUp;
+  }
+  digitalWrite(cfg::kPinStatusLed, cloudUp ? HIGH : !digitalRead(cfg::kPinStatusLed));
+  delay(500);
+}
