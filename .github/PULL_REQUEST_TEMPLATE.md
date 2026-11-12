@@ -1,24 +1,24 @@
-## What does this change?
+## เปลี่ยนอะไรบ้าง
 
-<!-- One or two sentences. -->
+<!-- สรุปหนึ่งถึงสองประโยค -->
 
 Closes #
 
-## Area
+## ส่วนงาน
 
-- [ ] Sensor node
-- [ ] Gateway
-- [ ] Cloud / dashboard
+- [ ] โหนดเซนเซอร์
+- [ ] เกตเวย์
+- [ ] คลาวด์ / แดชบอร์ด
 - [ ] AI
-- [ ] Docs / tests
+- [ ] เอกสาร / การทดสอบ
 
-## How was it tested?
+## ทดสอบอย่างไร
 
-<!-- Hardware used, serial log, screenshot, measured numbers. -->
+<!-- ฮาร์ดแวร์ที่ใช้, serial log, ภาพหน้าจอ, ตัวเลขที่วัดได้ -->
 
 ## Checklist
 
-- [ ] `pio run` passes for the project I changed (CI is green)
-- [ ] No secrets (Wi-Fi, tokens, API keys, webhook URLs) in the diff
-- [ ] Pin map / message format in the README updated if I changed them
-- [ ] I can explain every line of this change in Q&A
+- [ ] `pio run` ผ่านสำหรับโปรเจกต์ที่แก้ (CI เป็นสีเขียว)
+- [ ] ไม่มีข้อมูลลับ (Wi-Fi, token, API key, URL ของ webhook) ใน diff
+- [ ] อัปเดตผังขา / รูปแบบข้อความในเอกสารแล้ว หากมีการเปลี่ยน
+- [ ] อธิบายได้ทุกบรรทัดของการเปลี่ยนแปลงนี้ตอนถาม-ตอบ
