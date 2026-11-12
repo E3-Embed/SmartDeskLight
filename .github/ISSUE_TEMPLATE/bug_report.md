@@ -1,27 +1,27 @@
 ---
-name: Bug report
-about: Something on the device, gateway or dashboard does not work
+name: รายงานบั๊ก
+about: มีบางอย่างในอุปกรณ์ เกตเวย์ หรือแดชบอร์ดทำงานผิดปกติ
 title: ''
 labels: bug
 assignees: ''
 ---
 
-## What happened
+## เกิดอะไรขึ้น
 
-## What you expected
+## สิ่งที่ควรจะเป็น
 
-## How to reproduce
+## วิธีทำให้เกิดซ้ำ
 
 1.
 2.
 3.
 
-## Where
+## เกิดที่ไหน
 
-- Board / part: <!-- sensor node, gateway, dashboard, AI, mechanism -->
+- บอร์ด / ส่วนงาน: <!-- โหนดเซนเซอร์, เกตเวย์, แดชบอร์ด, AI, กลไก -->
 - Commit / branch:
-- Power source and Wi-Fi (hotspot?):
+- แหล่งจ่ายไฟและ Wi-Fi (ใช้ hotspot หรือไม่):
 
-## Logs / photos
+## Log / รูปภาพ
 
-<!-- Serial monitor output, screenshots, video -->
+<!-- ผลจาก serial monitor, ภาพหน้าจอ, วิดีโอ -->

@@ -1,30 +1,30 @@
 ---
-name: Task
-about: A piece of work to implement, test or document
+name: งาน
+about: งานที่ต้องพัฒนา ทดสอบ หรือเขียนเอกสาร
 title: ''
 labels: task
 assignees: ''
 ---
 
-## Goal
+## เป้าหมาย
 
-<!-- What should be true when this is done? -->
+<!-- เมื่องานนี้เสร็จ อะไรควรเป็นจริง -->
 
-## Area
+## ส่วนงาน
 
-- [ ] Sensor node
-- [ ] Gateway
-- [ ] Cloud / dashboard
+- [ ] โหนดเซนเซอร์
+- [ ] เกตเวย์
+- [ ] คลาวด์ / แดชบอร์ด
 - [ ] AI
-- [ ] Hardware / mechanism
-- [ ] Tests / report
+- [ ] ฮาร์ดแวร์ / กลไก
+- [ ] การทดสอบ / รายงาน
 
-## Definition of done
+## เกณฑ์ว่าเสร็จ
 
-- [ ] Builds in CI
-- [ ] Demonstrated on hardware (photo / video / serial log attached)
-- [ ] README or docs updated if behaviour changed
+- [ ] บิลด์ผ่านใน CI
+- [ ] สาธิตบนฮาร์ดแวร์จริงแล้ว (แนบรูป / วิดีโอ / serial log)
+- [ ] อัปเดต README หรือเอกสาร หากพฤติกรรมของระบบเปลี่ยน
 
-## Due
+## กำหนดส่ง
 
-<!-- e.g. before the 20 Nov checkpoint video -->
+<!-- เช่น ก่อนวิดีโอ checkpoint วันที่ 20 พ.ย. -->
