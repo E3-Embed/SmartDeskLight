@@ -1,0 +1,59 @@
+name: emqx-npmplus
+
+# NPMplus owns the public ports (80/443/81, plus 1883/8883 as nginx streams).
+# EMQX only publishes to loopback, so nothing but nginx can reach the broker.
+#
+# Traffic flow:
+#   MQTT   tcp/1883  -> npmplus stream -> 127.0.0.1:1883  (EMQX)
+#   MQTT   tcp/8883  -> npmplus stream (TLS terminated) -> 127.0.0.1:1883
+#   MQTT   wss/443   -> npmplus proxy host /mqtt -> 127.0.0.1:8083
+#   Dash   https/443 -> npmplus proxy host -> 127.0.0.1:18083
+
+services:
+  npmplus:
+    image: docker.io/zoeyvid/npmplus:latest
+    container_name: npmplus
+    restart: unless-stopped
+    # Host mode is what NPMplus recommends: it can then bind 80/443 and any
+    # stream port (1883/8883) directly, without publishing them in compose.
+    network_mode: host
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - SETGID
+    security_opt:
+      - no-new-privileges=true
+    volumes:
+      - ./npmplus:/data
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
+      ACME_EMAIL: ${ACME_EMAIL}
+      # Keep the admin UI off the LAN (then reach it via SSH tunnel):
+      # NPM_IPV4_BINDING: 127.0.0.1
+
+  emqx:
+    image: emqx/emqx:latest
+    container_name: emqx
+    restart: unless-stopped
+    # Must match the host part of EMQX_NODE_NAME; a short name like "emqx"
+    # is not allowed because the Erlang node runs in long-name mode.
+    hostname: emqx.local
+    environment:
+      EMQX_NODE_NAME: emqx@emqx.local
+      # Only used when ./emqx/data is initialised for the first time.
+      EMQX_DASHBOARD__DEFAULT_PASSWORD: ${EMQX_DASHBOARD_PASSWORD:?set EMQX_DASHBOARD_PASSWORD in .env}
+    ports:
+      # Loopback only - the reverse proxy is the only path in.
+      - "127.0.0.1:51883:1883"    # MQTT (plain) for the 1883/8883 streams
+      - "127.0.0.1:58083:8083"    # MQTT over WebSocket, proxied at /mqtt
+      - "127.0.0.1:18083:18083"  # Dashboard + REST API, proxied by host
+    volumes:
+      - ./emqx/data:/opt/emqx/data
+      - ./emqx/log:/opt/emqx/log
+    healthcheck:
+      test: ["CMD-SHELL", "emqx ctl status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
