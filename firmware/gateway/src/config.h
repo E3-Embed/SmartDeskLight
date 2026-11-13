@@ -6,13 +6,19 @@
 namespace cfg {
 
 // ---------------------------------------------------------------- pins
-constexpr int kPinSda = 21;
-constexpr int kPinScl = 22;
-constexpr int kPinPir = 34;          // input-only pin, PIR has its own driver stage
+// ESP32-S3 (DevKitC-1 N8): GPIO 22-25 do not exist, 26-32 are the in-package SPI flash,
+// 19/20 are USB, 43/44 are UART0. Valid and free: 1-18, 21, 33-42, 47, 48 (33-37 only
+// when the module has no PSRAM — the N8 has none).
+constexpr int kPinSda = 8;
+constexpr int kPinScl = 9;
+constexpr int kPinPir = 34;          // PIR has its own driver stage; 33-37 free on N8 (no PSRAM)
 constexpr int kPinStopButton = 4;    // INPUT_PULLUP, active low
-constexpr int kPinServo[3] = {25, 26, 27};  // 0 = diffuser, 1 = ND, 2 = warm/CTO
+// Servos must stay inside 1-21/35-45/47-48: ESP32Servo enforces that list and attach()
+// silently fails outside it.
+constexpr int kPinServo[3] = {15, 16, 17};  // 0 = diffuser, 1 = ND, 2 = warm/CTO
 constexpr int kPinLedPwm = 18;       // dimming input of the constant-current LED driver
-constexpr int kPinStatusLed = 2;     // on-board LED
+constexpr int kPinStatusLed = 2;     // external status LED; the on-board WS2812 is GPIO48
+constexpr int kPinRgbLed = 48;       // ESP32-S3-DevKitC-1 on-board WS2812 (single pixel)
 
 // ---------------------------------------------------------------- servos / filters
 constexpr int kServoOutDeg = 10;     // filter folded out of the light path
@@ -46,8 +52,24 @@ constexpr int kMaxNodes = 8;
 constexpr int kSimulatedNodes = 0;       // set to 2 for the "1 physical + 2 simulated" test
 constexpr uint8_t kFirstSimulatedId = 101;
 
+// ---------------------------------------------------------------- identity
+// One name for the network and the broker: DHCP hostname, MQTT client id, and the
+// "device" field in telemetry. NETPIE2020 pins the MQTT client id to the device key in
+// the console, so the device's Client ID there must match this exactly.
+// Rules: <= 32 chars, letters/digits/hyphen only, no spaces.
+constexpr const char *kDeviceName = "sdl-gateway";
+
+// ---------------------------------------------------------------- time (SNTP)
+// Only used as a wall clock for X.509 validity dates and telemetry timestamps. Tried in
+// order; the first that answers sets the clock. On a phone hotspot UDP/123 is often
+// filtered, so the direct-IP-style hosts come before the pool's varied servers.
+constexpr const char *kNtpServer1 = "time1.nimt.or.th";
+constexpr const char *kNtpServer2 = "time.nist.gov";
+constexpr const char *kNtpServer3 = "pool.ntp.org";
+
 // ---------------------------------------------------------------- cloud
-constexpr const char *kMqttHost = "mqtt.netpie.io";
+// constexpr const char *kMqttHost = "mqtt.netpie.io";
+constexpr const char *kMqttHost = "gw.embed.rachatat.com";
 constexpr uint16_t kMqttPort = 8883;  // NETPIE2020 MQTTS on the publicly-trusted chain
 // 8883 presents a certificate that chains to "USERTrust RSA Certification Authority",
 // which ships in the ESP32's built-in CA bundle (see ca_bundle.h), so the firmware verifies
@@ -55,6 +77,11 @@ constexpr uint16_t kMqttPort = 8883;  // NETPIE2020 MQTTS on the publicly-truste
 // same broker on NETPIE's private "NEXPIE Device Broker" CA, which no public root can verify —
 // that is why the old code had to pin the leaf certificate instead.
 constexpr uint32_t kShadowPeriodMs = 30000;  // NETPIE free tier: ~86k shadow writes/month (quota 500k)
+// System telemetry every 10 s is ~260k messages/month; raise it if the free-tier quota gets tight.
+constexpr uint32_t kSystemPeriodMs = 10000;  // Wi-Fi/MQTT/heap/uptime status on @msg/sdl/sys
+// MQTT PINGREQ interval. The broker declares us dead after 1.5x this, which is also how
+// long the retained Last Will on @msg/sdl/status takes to flip to "offline".
+constexpr uint16_t kMqttKeepAliveSec = 30;
 constexpr uint32_t kAiPeriodMs = 5UL * 60UL * 1000UL;
 constexpr int kBufferSlots = 300;        // store-and-forward: ~5 min of 1 Hz readings (~11 kB)
 constexpr const char *kAiModel = "gemini-3.5-flash-lite";  // ~2 s per request; 2.5 models are closed to new users
@@ -62,5 +89,9 @@ constexpr long kUtcOffsetSec = 7L * 3600L;  // Asia/Bangkok
 constexpr const char *kTopicCmd = "@msg/sdl/cmd";
 constexpr const char *kTopicAlert = "@msg/sdl/alert";
 constexpr const char *kTopicShadow = "@shadow/data/update";
+constexpr const char *kTopicSystem = "@msg/sdl/sys";
+// Retained "online"/"offline", driven by the MQTT Last Will, so any dashboard that
+// subscribes late still learns the current link state immediately.
+constexpr const char *kTopicStatus = "@msg/sdl/status";
 
 }  // namespace cfg

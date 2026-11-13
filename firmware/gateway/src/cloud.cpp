@@ -1,10 +1,12 @@
 #include "cloud.h"
 
+#include <Arduino.h>
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
 #include <PubSubClient.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <esp_system.h>
 #include <string.h>
 #include <time.h>
 
@@ -24,11 +26,15 @@ RingBuffer<app::TelemetryRecord, cfg::kBufferSlots> backlog;  // readings waitin
 uint32_t lastWifiTryMs = 0;
 uint32_t lastMqttTryMs = 0;
 uint32_t lastShadowMs = 0;
+uint32_t lastSystemMs = 0;
 uint32_t lastAiMs = 0;
 uint32_t lastNtpRetryMs = 0;
 bool timeConfigured = false;
 bool wasOnline = false;
 uint32_t offlineSinceMs = 0;
+bool systemDue = true;       // publish a system report as soon as MQTT comes up
+uint32_t wifiRetries = 0;    // WiFi.reconnect() calls
+uint32_t mqttFails = 0;      // TLS or MQTT connect attempts that failed
 
 // ---------------------------------------------------------------- dashboard commands
 // Payloads on @msg/sdl/cmd:  {"mode":"coding"}  or  {"feedback":"too_bright"|"too_dim"}
@@ -60,13 +66,13 @@ bool timeValid() { return app::nowEpoch() != 0; }  // same threshold the rest of
 bool ensureTime() {
   if (timeValid()) return true;
   if (!timeConfigured) {
-    configTime(cfg::kUtcOffsetSec, 0, "pool.ntp.org", "time.google.com", "time.nist.gov");
+    configTime(cfg::kUtcOffsetSec, 0, cfg::kNtpServer1, cfg::kNtpServer2, cfg::kNtpServer3);
     timeConfigured = true;
     lastNtpRetryMs = millis();
-    Serial.println("[cloud] waiting for NTP sync before TLS...");
+    Serial.printf("[cloud] waiting for NTP (%s) before TLS...\n", cfg::kNtpServer1);
   } else if (millis() - lastNtpRetryMs > 60000) {
     // SNTP never landed (blocked UDP/123, dead DNS): arm it again instead of failing forever.
-    configTime(cfg::kUtcOffsetSec, 0, "pool.ntp.org", "time.google.com", "time.nist.gov");
+    configTime(cfg::kUtcOffsetSec, 0, cfg::kNtpServer1, cfg::kNtpServer2, cfg::kNtpServer3);
     lastNtpRetryMs = millis();
     Serial.println("[cloud] NTP still not synced, re-arming");
   }
@@ -82,6 +88,7 @@ bool ensureWifi() {
   if (millis() - lastWifiTryMs > 10000) {
     lastWifiTryMs = millis();
     Serial.println("[cloud] Wi-Fi reconnecting...");
+    wifiRetries++;
     WiFi.reconnect();
   }
   return false;
@@ -97,19 +104,31 @@ bool ensureMqtt() {
   // opened before any credential is sent, so the token never reaches an unverified peer.
   if (!tls.connected()) {
     if (!tls.connect(cfg::kMqttHost, cfg::kMqttPort)) {
+      mqttFails++;
       Serial.printf("[cloud] TLS connect to NETPIE failed (clock=%lld)\n",
                     static_cast<long long>(time(nullptr)));
       return false;
     }
   }
 
-  // NETPIE2020: client id = device Client ID, username = Token, password = Secret.
-  if (!mqtt.connect(NETPIE_CLIENT_ID, NETPIE_TOKEN, NETPIE_SECRET)) {
+  // NETPIE2020: client id = device Client ID (cfg::kDeviceName), username = Token,
+  // password = Secret. A different id is rejected by the broker's key check.
+  // The Last Will is retained: when the gateway disappears without a clean DISCONNECT
+  // (power cut, crash, radio gone past the 30 s keepalive), EMQX publishes "offline"
+  // for us and every subscriber sees it.
+  if (!mqtt.connect(cfg::kDeviceName, NETPIE_TOKEN, NETPIE_SECRET, cfg::kTopicStatus, 1, true,
+                    "offline")) {
+    mqttFails++;
     Serial.printf("[cloud] MQTTS connect failed, state %d\n", mqtt.state());
     return false;
   }
+  // Retained too, so replacing the will's value is atomic from a subscriber's view.
+  if (!mqtt.publish(cfg::kTopicStatus, "online", true)) {
+    Serial.println("[cloud] status publish failed");
+  }
   mqtt.subscribe(cfg::kTopicCmd);
   xEventGroupSetBits(app::events, app::kBitMqttUp);
+  systemDue = true;  // report the fresh link immediately, then on the normal cadence
   Serial.println("[cloud] MQTTS connected to NETPIE2020");
   return true;
 }
@@ -176,6 +195,64 @@ void publishShadow() {
   char payload[1024];
   size_t n = serializeJson(doc, payload, sizeof(payload));
   mqtt.publish(cfg::kTopicShadow, reinterpret_cast<const uint8_t *>(payload), n);
+}
+
+// Which kind of reset brought the firmware back — the first thing to look at after a mystery reboot.
+const char *resetReasonName(esp_reset_reason_t r) {
+  switch (r) {
+    case ESP_RST_POWERON: return "poweron";
+    case ESP_RST_EXT: return "external";
+    case ESP_RST_SW: return "software";
+    case ESP_RST_PANIC: return "panic";
+    case ESP_RST_INT_WDT: return "int_wdt";
+    case ESP_RST_TASK_WDT: return "task_wdt";
+    case ESP_RST_WDT: return "wdt";
+    case ESP_RST_DEEPSLEEP: return "deepsleep";
+    case ESP_RST_BROWNOUT: return "brownout";
+    case ESP_RST_SDIO: return "sdio";
+    default: return "unknown";
+  }
+}
+
+// Link and health telemetry on its own topic, every kSystemPeriodMs. Keys stay flat so a
+// NETPIE Feed can pick them up without nesting. "uptime_s" resetting to a small number is
+// how a dashboard spots a reboot; "reset" says why.
+void publishSystem() {
+  JsonDocument doc;
+  doc["device"] = cfg::kDeviceName;
+  doc["uptime_s"] = millis() / 1000;
+  doc["wifi_up"] = WiFi.status() == WL_CONNECTED ? 1 : 0;
+  doc["wifi_code"] = static_cast<int>(WiFi.status());  // WL_* enum, for the status table
+  doc["rssi"] = WiFi.RSSI();
+  doc["wifi_ch"] = WiFi.channel();
+  doc["ip"] = WiFi.localIP().toString();
+  doc["wifi_retries"] = wifiRetries;
+  doc["mqtt_fails"] = mqttFails;
+  doc["ntp"] = timeValid() ? 1 : 0;
+  doc["time"] = app::nowEpoch();
+  doc["heap"] = ESP.getFreeHeap();
+  doc["heap_min"] = ESP.getMinFreeHeap();
+  doc["temp_c"] = temperatureRead();
+  doc["reset"] = resetReasonName(esp_reset_reason());
+  {
+    app::StateLock lock;
+    int nodes = 0;
+    for (const auto &n : app::state.nodes) {
+      if (n.used) nodes++;
+    }
+    doc["nodes"] = nodes;
+    doc["mode"] = app::modeName(app::state.mode);
+    doc["safe"] = app::state.lamp.safe ? 1 : 0;
+    doc["pwm"] = app::state.lamp.pwm;
+  }
+  doc["buffered"] = backlog.size();
+  doc["dropped"] = backlog.dropped();
+
+  char payload[512];
+  size_t n = serializeJson(doc, payload, sizeof(payload));
+  if (!mqtt.publish(cfg::kTopicSystem, reinterpret_cast<const uint8_t *>(payload), n)) {
+    Serial.println("[cloud] system report publish failed");
+  }
 }
 
 // Sends what is waiting, oldest first. Stops at the first failure so order is kept.
@@ -291,7 +368,7 @@ void task(void *) {
   mqtt.setServer(cfg::kMqttHost, cfg::kMqttPort);
   mqtt.setCallback(onMqttMessage);
   mqtt.setBufferSize(1024);
-  mqtt.setKeepAlive(30);
+  mqtt.setKeepAlive(cfg::kMqttKeepAliveSec);
   mqtt.setSocketTimeout(5);
 
   for (;;) {
@@ -311,6 +388,12 @@ void task(void *) {
     if (mqttUp && millis() - lastShadowMs > cfg::kShadowPeriodMs) {
       lastShadowMs = millis();
       publishShadow();
+    }
+
+    if (mqttUp && (systemDue || millis() - lastSystemMs >= cfg::kSystemPeriodMs)) {
+      systemDue = false;
+      lastSystemMs = millis();
+      publishSystem();
     }
 
     handleAlerts(wifiUp && tlsReady, mqttUp);

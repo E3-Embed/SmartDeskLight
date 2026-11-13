@@ -90,6 +90,9 @@ struct Alert {
 constexpr EventBits_t kBitWifiUp = BIT0;
 constexpr EventBits_t kBitMqttUp = BIT1;
 constexpr EventBits_t kBitAiRequest = BIT2;
+// Set once setup() has finished its first association attempt, so the status LED can tell
+// "still trying to join" (white pulse) from "the attempt failed" (red blink).
+constexpr EventBits_t kBitWifiTried = BIT3;
 
 extern State state;
 extern SemaphoreHandle_t stateMutex;

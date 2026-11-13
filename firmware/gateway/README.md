@@ -12,7 +12,8 @@
 | `EspNowRxTask` | 3 | 1 | `src/espnow_link.cpp` | ดึงแพ็กเก็ต ESP-NOW, ตัดแพ็กเก็ตซ้ำด้วย `(node_id, seq)`, ตารางโหนด |
 | `SensorTask` | 2 | 1 | `src/sensors.cpp` | อ่านระยะ VL53L0X, การมีคนอยู่จาก PIR และกำลังไฟจาก INA219 ทุก 200 ms |
 | `CloudTask` | 1 | 0 | `src/cloud.cpp` | Wi-Fi, NETPIE MQTTS, เก็บแล้วส่งต่อ, shadow, คำสั่ง, AI, การแจ้งเตือน |
-| `loop()` | 1 | 1 | `src/main.cpp` | LED สถานะ (ติดค้าง = เชื่อมคลาวด์ได้, กะพริบ = ออฟไลน์) |
+| `StatusLedTask` | 1 | 1 | `src/status_led.cpp` | LED RGB บนบอร์ด (WS2812 GPIO48): ขาวกะพริบครั้งเดียว=บูต, ขาวค่อยๆ สว่าง=กำลังต่อ Wi-Fi, แดง=ต่อ Wi-Fi ไม่ได้, ฟ้า=รอ NTP, เหลือง=รอ MQTT, ม่วง=ออนไลน์แต่โหนดไม่ส่งข้อมูล, เขียว=ปกติ, น้ำเงิน=สถานะปลอดภัย |
+| `loop()` | 1 | 1 | `src/main.cpp` | LED สถานะภายนอก GPIO2 (ติดค้าง = เชื่อมคลาวด์ได้, กะพริบ = ออฟไลน์) |
 
 **เหตุผลของ priority:** ความปลอดภัยและการควบคุมต้องไม่รอเครือข่าย `ControlTask` จึงสูงสุด รองลงมาคือ `EspNowRxTask` เพื่อไม่ให้คิววิทยุ 32 ช่องล้น เซนเซอร์อ่านเป็นรอบและไม่เร่งด่วน ส่วนงานคลาวด์ (TLS, HTTP) อาจบล็อกได้หลายวินาที จึงต่ำสุดและแยกไปทำงานบน core 0 ตัวเดียว
 
@@ -42,6 +43,7 @@
 | `src/ai_client.h/.cpp` | ส่งคำขอไปยัง Gemini API และแปลง JSON |
 | `src/cloud.h/.cpp` | CloudTask: MQTTS, backlog, shadow, คำสั่ง, Discord |
 | `src/ring_buffer.h` | FIFO ขนาดคงที่สำหรับเก็บแล้วส่งต่อ |
+| `src/status_led.h/.cpp` | LED RGB บนบอร์ด แสดงสถานะลิงก์และสถานะปลอดภัย |
 
 ## ลูปควบคุม
 
@@ -68,7 +70,7 @@ AI เสนอแค่ `target_lux`, `target_cct` และชุดฟิล�
 
 ## การตั้งค่า
 
-1. **NETPIE2020:** สร้าง device แล้วคัดลอก Client ID / Token / Secret ไปใส่ใน `include/secrets.h` (คัดลอกจาก `secrets.example.h`)
+1. **NETPIE2020:** สร้าง device แล้วตั้ง Client ID ของ device ให้ตรงกับ `cfg::kDeviceName` ใน `src/config.h` (ค่าเริ่มต้น `sdl-gateway` — ชื่อนี้ใช้เป็น hostname บน Wi-Fi และ client id ของ MQTT ด้วย) จากนั้นคัดลอก Token / Secret ไปใส่ใน `include/secrets.h` (คัดลอกจาก `secrets.example.h`)
 2. **ตรวจใบรับรอง NETPIE (E5):** พอร์ต 8883 ของ broker ส่งใบรับรองที่ต่อลูกโซ่ถึง root สาธารณะ "USERTrust RSA Certification Authority" ซึ่งมีอยู่ใน CA bundle ที่ฝังมากับ Arduino core เฟิร์มแวร์จึงเรียก `ca::useBuiltin()` (ห่อ `useBuiltinCACertBundle()` บน core 3.x และ `setCACertBundle()` บน core 2.x) — ไม่ต้องมีไฟล์ PEM หรือ pin fingerprint อีก ตรวจสายลูกโซ่เองได้ด้วย
    `openssl s_client -connect mqtt.netpie.io:8883 -servername mqtt.netpie.io </dev/null | openssl x509 -noout -issuer`
    พอร์ต 1884 ใช้ใบรับรองจาก CA ภายในของ NETPIE ("NEXPIE Device Broker") ซึ่ง root สาธารณะตรวจไม่ได้ จึงย้ายมาใช้ 8883; ถ้า broker ไม่รับ MQTT บน 8883 ให้ย้อนกลับไป 1884 พร้อม pin fingerprint
@@ -88,6 +90,10 @@ AI เสนอแค่ `target_lux`, `target_cct` และชุดฟิล�
 | `@shadow/data/update` | เกตเวย์ → คลาวด์ ทุก 30 วินาที | `n1_lux, n1_cct, n1_rx, n1_seq, dist_mm, presence, lamp_mW, diffuser, nd, warm, pwm, safe, mode, target_lux, ai, buffered, dropped, heap, uptime_s` |
 | `@msg/sdl/cmd` | แดชบอร์ด → เกตเวย์ | `{"mode":"coding"}` หรือ `{"feedback":"too_bright"}` / `"too_dim"` |
 | `@msg/sdl/alert` | เกตเวย์ → คลาวด์ | ข้อความแจ้งเตือน (ส่งเข้า Discord ด้วย) |
+| `@msg/sdl/sys` | เกตเวย์ → คลาวด์ ทุก 10 วินาที | สถานะระบบ: `uptime_s, wifi_up, wifi_code, rssi, wifi_ch, ip, wifi_retries, mqtt_fails, ntp, time, heap, heap_min, temp_c, reset, nodes, mode, safe, pwm, buffered, dropped` |
+| `@msg/sdl/status` | เกตเวย์ → คลาวด์ (retained) | `"online"` / `"offline"` — `online` ส่งตอนเชื่อมต่อสำเร็จ ส่วน `offline` เป็น MQTT Last Will ที่ broker ส่งแทนเมื่อเกตเวย์ขาดการเชื่อมต่อเกิน keepalive 30 วินาที แดชบอร์ดจึงรู้สถานะลิงก์ทันทีที่ subscribe |
+
+Topic ที่ขึ้นต้นด้วย `@msg/` ทั้งหมด (`cmd`, `alert`, `sys`, `status`) ต้องประกาศเป็น alias ของ device `gateway` ในหน้า NETPIE ก่อน ไม่งั้น broker จะปฏิเสธ publish/subscribe
 
 ### โปรเจกต์บน NETPIE
 

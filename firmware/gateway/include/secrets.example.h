@@ -6,7 +6,8 @@
 #define WIFI_PASSWORD    "your-password"
 
 // ---- NETPIE2020 device (Device > Key): MQTTS mqtt.netpie.io:8883
-#define NETPIE_CLIENT_ID "device-client-id"
+// The MQTT client id is cfg::kDeviceName in src/config.h and must match the Client ID
+// you registered for the device in the NETPIE console — it is not set here.
 #define NETPIE_TOKEN     "device-token"
 #define NETPIE_SECRET    "device-secret"
 

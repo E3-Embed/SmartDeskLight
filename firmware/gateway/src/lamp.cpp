@@ -27,6 +27,12 @@ void moveServo(int i, bool in) {
   if (!attached[i]) {
     servos[i].setPeriodHertz(50);
     servos[i].attach(cfg::kPinServo[i], 500, 2400);  // SG90 / MG90S pulse range
+    // attach() returns 0 on a rejected pin, which is also a legal channel number, so ask
+    // the object whether the pin really took. A silent failure here looks like a dead servo.
+    if (!servos[i].attached()) {
+      Serial.printf("[lamp] servo %d attach failed on GPIO %d\n", i, cfg::kPinServo[i]);
+      return;
+    }
     attached[i] = true;
   }
   servos[i].write(clampAngle(in ? cfg::kServoInDeg : cfg::kServoOutDeg));
