@@ -1,4 +1,7 @@
 // ESP-NOW link to the sensor nodes (E4: ACK + duplicate detection, scalability via node_id).
+// Accepts sensor telemetry (SdlTelemetry) and node health heartbeats (SdlSysStatus); both are
+// ACKed and de-duplicated the same way. Nodes find the gateway's channel by broadcasting a
+// heartbeat probe, so nothing here needs to know a node's address in advance.
 #pragma once
 
 namespace espnow_link {

@@ -9,19 +9,24 @@ namespace app {
 State state;
 SemaphoreHandle_t stateMutex = nullptr;
 QueueHandle_t qTelemetry = nullptr;
+QueueHandle_t qNodeSys = nullptr;
 QueueHandle_t qControl = nullptr;
 QueueHandle_t qCloud = nullptr;
+QueueHandle_t qCloudSys = nullptr;
 QueueHandle_t qAlerts = nullptr;
 EventGroupHandle_t events = nullptr;
 
 void init() {
   stateMutex = xSemaphoreCreateMutex();
   qTelemetry = xQueueCreate(32, sizeof(SdlTelemetry));
+  qNodeSys = xQueueCreate(8, sizeof(SdlSysStatus));
   qControl = xQueueCreate(8, sizeof(ControlEvent));
   qCloud = xQueueCreate(32, sizeof(TelemetryRecord));
+  qCloudSys = xQueueCreate(16, sizeof(NodeSysRecord));
   qAlerts = xQueueCreate(8, sizeof(Alert));
   events = xEventGroupCreate();
-  configASSERT(stateMutex && qTelemetry && qControl && qCloud && qAlerts && events);
+  configASSERT(stateMutex && qTelemetry && qNodeSys && qControl && qCloud && qCloudSys &&
+               qAlerts && events);
 }
 
 const char *modeName(Mode m) {

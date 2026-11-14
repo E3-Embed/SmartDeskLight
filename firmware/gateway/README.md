@@ -2,7 +2,7 @@
 
 ผู้รับผิดชอบ: นรินธร ยางงาม — Embedded Developer (Gateway & Cloud)
 
-เกตเวย์รับค่าจากโหนดเซนเซอร์ผ่าน ESP-NOW อ่านเซนเซอร์ของตัวเอง ควบคุมโคมไฟแบบวงปิด และสื่อสารกับ NETPIE2020, LLM API และ Discord
+เกตเวย์รับค่าจากโหนดเซนเซอร์ผ่าน ESP-NOW อ่านเซนเซอร์ของตัวเอง ควบคุมโคมไฟแบบวงปิด และสื่อสารกับ EMQX (self-hosted), LLM API และ Discord
 
 ## Task
 
@@ -11,8 +11,8 @@
 | `ControlTask` | 4 | 1 | `src/control.cpp` | เหตุการณ์ปุ่มหยุด, สถานะปลอดภัย, ควบคุมแบบวงปิดจาก lux ที่วัดได้ (ฟิลเตอร์ + PWM) |
 | `EspNowRxTask` | 3 | 1 | `src/espnow_link.cpp` | ดึงแพ็กเก็ต ESP-NOW, ตัดแพ็กเก็ตซ้ำด้วย `(node_id, seq)`, ตารางโหนด |
 | `SensorTask` | 2 | 1 | `src/sensors.cpp` | อ่านระยะ VL53L0X, การมีคนอยู่จาก PIR และกำลังไฟจาก INA219 ทุก 200 ms |
-| `CloudTask` | 1 | 0 | `src/cloud.cpp` | Wi-Fi, NETPIE MQTTS, เก็บแล้วส่งต่อ, shadow, คำสั่ง, AI, การแจ้งเตือน |
-| `StatusLedTask` | 1 | 1 | `src/status_led.cpp` | LED RGB บนบอร์ด (WS2812 GPIO48): ขาวกะพริบครั้งเดียว=บูต, ขาวค่อยๆ สว่าง=กำลังต่อ Wi-Fi, แดง=ต่อ Wi-Fi ไม่ได้, ฟ้า=รอ NTP, เหลือง=รอ MQTT, ม่วง=ออนไลน์แต่โหนดไม่ส่งข้อมูล, เขียว=ปกติ, น้ำเงิน=สถานะปลอดภัย |
+| `CloudTask` | 1 | 0 | `src/cloud.cpp` | Wi-Fi, MQTTS, เก็บแล้วส่งต่อ, state snapshot, คำสั่ง, AI, การแจ้งเตือน |
+| `StatusLedTask` | 1 | 1 | `src/status_led.cpp` | LED RGB บนบอร์ด (WS2812 GPIO48): ขาวกะพริบครั้งเดียว=บูต, ขาวค่อยๆ สว่าง=กำลังต่อ Wi-Fi, แดง=ต่อ Wi-Fi ไม่ได้, ฟ้า=รอ NTP, เหลือง=รอ MQTT, ม่วงแดง=โหนดเงียบ, ม่วง=โหนดยังอยู่แต่ยังไม่มีค่าที่วัดได้, เขียว=ปกติ, น้ำเงิน=สถานะปลอดภัย |
 | `loop()` | 1 | 1 | `src/main.cpp` | LED สถานะภายนอก GPIO2 (ติดค้าง = เชื่อมคลาวด์ได้, กะพริบ = ออฟไลน์) |
 
 **เหตุผลของ priority:** ความปลอดภัยและการควบคุมต้องไม่รอเครือข่าย `ControlTask` จึงสูงสุด รองลงมาคือ `EspNowRxTask` เพื่อไม่ให้คิววิทยุ 32 ช่องล้น เซนเซอร์อ่านเป็นรอบและไม่เร่งด่วน ส่วนงานคลาวด์ (TLS, HTTP) อาจบล็อกได้หลายวินาที จึงต่ำสุดและแยกไปทำงานบน core 0 ตัวเดียว
@@ -22,9 +22,11 @@
 | กลไก | จาก → ไป | ข้อมูลที่ส่ง |
 |---|---|---|
 | คิว `qTelemetry` | callback ของ ESP-NOW → EspNowRxTask | แพ็กเก็ต `SdlTelemetry` |
+| คิว `qNodeSys` | callback ของ ESP-NOW → EspNowRxTask | heartbeat `SdlSysStatus` |
 | คิว `qCloud` | EspNowRxTask → CloudTask | ค่าที่อ่านใหม่ + เวลาที่ได้รับ |
+| คิว `qCloudSys` | EspNowRxTask → CloudTask | heartbeat ของโหนด + เวลาที่ได้รับ |
 | คิว `qControl` | ISR ปุ่มหยุด, CloudTask → ControlTask | หยุด, โหมด, feedback, โปรไฟล์ใหม่จาก AI |
-| คิว `qAlerts` | ทุก task → CloudTask | ข้อความแจ้งเตือนสำหรับ Discord / NETPIE |
+| คิว `qAlerts` | ทุก task → CloudTask | ข้อความแจ้งเตือนสำหรับ Discord / MQTT |
 | event group `events` | CloudTask ↔ task อื่น | Wi-Fi พร้อม, MQTT พร้อม, "ขอโปรไฟล์จาก AI" |
 | mutex `stateMutex` | ทุก task | `app::state` ที่ใช้ร่วมกัน (ผ่าน `StateLock`) |
 
@@ -32,7 +34,7 @@
 
 | ไฟล์ | หน้าที่ |
 |---|---|
-| `src/config.h` | ขา, เวลา, ค่าเกนการควบคุม, topic ของ NETPIE — แก้ค่าเหล่านี้ที่นี่ที่เดียว |
+| `src/config.h` | ขา, เวลา, ค่าเกนการควบคุม, topic ของ MQTT — แก้ค่าเหล่านี้ที่นี่ที่เดียว |
 | `src/app.h/.cpp` | ชนิดข้อมูลที่ใช้ร่วมกัน, คิว, mutex, event group, `raiseAlert()` |
 | `src/ca_bundle.h` | ผูก CA bundle ที่ฝังมากับ ESP32 เข้ากับ `WiFiClientSecure` (รองรับทั้ง core 2.x และ 3.x) |
 | `src/ina219.h/.cpp` | **ไดรเวอร์ INA219 ที่เขียนเอง** ระดับรีจิสเตอร์ (E8) |
@@ -41,7 +43,7 @@
 | `src/sensors.h/.cpp` | SensorTask |
 | `src/control.h/.cpp` | ControlTask, โปรไฟล์ตามกฎ, จำกัดค่าที่ได้จาก AI |
 | `src/ai_client.h/.cpp` | ส่งคำขอไปยัง Gemini API และแปลง JSON |
-| `src/cloud.h/.cpp` | CloudTask: MQTTS, backlog, shadow, คำสั่ง, Discord |
+| `src/cloud.h/.cpp` | CloudTask: MQTTS, backlog, state snapshot, คำสั่ง, Discord |
 | `src/ring_buffer.h` | FIFO ขนาดคงที่สำหรับเก็บแล้วส่งต่อ |
 | `src/status_led.h/.cpp` | LED RGB บนบอร์ด แสดงสถานะลิงก์และสถานะปลอดภัย |
 
@@ -64,47 +66,45 @@ AI เสนอแค่ `target_lux`, `target_cct` และชุดฟิล�
 |---|---|---|
 | E1 RTOS | `main.cpp`, `app.h` | 4 task, priority, queue, mutex, event group |
 | E2 Interrupt | `main.cpp` `onStopButton()` | ISR ทำแค่ debounce และส่งเหตุการณ์ ส่วน `ControlTask` เป็นผู้ทำงานจริง |
-| E4 Reliable comms | `espnow_link.cpp`, `cloud.cpp`, `ring_buffer.h` | ACK + ตัวนับแพ็กเก็ตซ้ำ; ถอด Wi-Fi แล้วค่าจะถูกเก็บในบัฟเฟอร์ (`buffered` ใน shadow) จากนั้นส่งต่อตามลำดับ |
+| E4 Reliable comms | `espnow_link.cpp`, `cloud.cpp`, `ring_buffer.h` | ACK + ตัวนับแพ็กเก็ตซ้ำ; ถอด Wi-Fi แล้วค่าจะถูกเก็บในบัฟเฟอร์ (`buffered` ใน `@msg/sdl/gw/state`) จากนั้นส่งต่อตามลำดับ |
 | E5 Security | `cloud.cpp` `ensureMqtt()`, `ca_bundle.h` | MQTTS พอร์ต 8883 ตรวจใบรับรองของ broker ด้วย CA bundle ที่ฝังมากับ ESP32 (`ca::useBuiltin()`) **ก่อน**ส่ง token; รอ NTP ให้ตรงก่อนทุกครั้งเพราะการตรวจลูกโซ่ใช้เวลาระบบ; ข้อมูลลับอยู่ใน `secrets.h` ที่ git ไม่ติดตามเท่านั้น |
 | E8 Own driver | `ina219.cpp` | คณิตศาสตร์การ calibrate, การอ่านรีจิสเตอร์; เทียบกับมัลติมิเตอร์ / logic analyzer |
 
 ## การตั้งค่า
 
-1. **NETPIE2020:** สร้าง device แล้วตั้ง Client ID ของ device ให้ตรงกับ `cfg::kDeviceName` ใน `src/config.h` (ค่าเริ่มต้น `sdl-gateway` — ชื่อนี้ใช้เป็น hostname บน Wi-Fi และ client id ของ MQTT ด้วย) จากนั้นคัดลอก Token / Secret ไปใส่ใน `include/secrets.h` (คัดลอกจาก `secrets.example.h`)
-2. **ตรวจใบรับรอง NETPIE (E5):** พอร์ต 8883 ของ broker ส่งใบรับรองที่ต่อลูกโซ่ถึง root สาธารณะ "USERTrust RSA Certification Authority" ซึ่งมีอยู่ใน CA bundle ที่ฝังมากับ Arduino core เฟิร์มแวร์จึงเรียก `ca::useBuiltin()` (ห่อ `useBuiltinCACertBundle()` บน core 3.x และ `setCACertBundle()` บน core 2.x) — ไม่ต้องมีไฟล์ PEM หรือ pin fingerprint อีก ตรวจสายลูกโซ่เองได้ด้วย
-   `openssl s_client -connect mqtt.netpie.io:8883 -servername mqtt.netpie.io </dev/null | openssl x509 -noout -issuer`
-   พอร์ต 1884 ใช้ใบรับรองจาก CA ภายในของ NETPIE ("NEXPIE Device Broker") ซึ่ง root สาธารณะตรวจไม่ได้ จึงย้ายมาใช้ 8883; ถ้า broker ไม่รับ MQTT บน 8883 ให้ย้อนกลับไป 1884 พร้อม pin fingerprint
-   การตรวจลูกโซ่ใช้เวลาระบบเป็นตัวเทียบวันหมดอายุ เกตเวย์จึงรอ NTP ซิงก์สำเร็จก่อนเปิด TLS ทุกครั้ง (ถ้าไม่สำเร็จใน 60 วินาทีจะตั้ง SNTP ใหม่)
+1. **บรอคเกอร์ MQTT:** โปรเจกต์ใช้ EMQX ที่รันเอง (`infra/docker-compose.yml`) มี NPMplus เป็นตัว terminate TLS ที่พอร์ต 8883 ตั้ง host ใน `cfg::kMqttHost` (`src/config.h`) และใส่ username / password ของ device ใน `include/secrets.h` (คัดลอกจาก `secrets.example.h`) — ตัวแปรยังใช้ชื่อ `NETPIE_TOKEN` / `NETPIE_SECRET` ตามของเดิม ส่วน client id คือ `cfg::kDeviceName` (`sdl-gateway`)
+2. **ตรวจใบรับรอง (E5):** NPMplus ออกใบรับรองด้วย ACME ซึ่งต่อลูกโซ่ถึง root สาธารณะที่มีอยู่ใน CA bundle ที่ฝังมากับ Arduino core เฟิร์มแวร์จึงเรียก `ca::useBuiltin()` ไม่ต้องมีไฟล์ PEM หรือ pin fingerprint ตรวจเองได้ด้วย
+   `openssl s_client -connect gw.embed.rachatat.com:8883 -servername gw.embed.rachatat.com </dev/null | openssl x509 -noout -issuer`
+   การตรวจลูกโซ่ใช้เวลาระบบเทียบวันหมดอายุ เกตเวย์จึงรอ NTP ซิงก์สำเร็จก่อนเปิด TLS ทุกครั้ง (ถ้าไม่สำเร็จใน 60 วินาทีจะตั้ง SNTP ใหม่)
 3. **AI:** ใส่ Gemini API key ใน `LLM_API_KEY` (เว้นว่าง = ใช้โปรไฟล์ตามกฎอย่างเดียว) ชื่อโมเดลอยู่ที่ `cfg::kAiModel`
 4. **Discord:** สร้าง webhook ของช่องแชตแล้วใส่ URL ใน `DISCORD_WEBHOOK`
-5. **ช่องสัญญาณของโหนดเซนเซอร์:** ESP-NOW ทำงานได้เมื่อโหนดใช้ช่อง Wi-Fi เดียวกับเกตเวย์ ตอนบูตเกตเวย์จะพิมพ์ `[espnow] ready, MAC …, channel N` — โหนดต้องเรียก `esp_wifi_set_channel(N, WIFI_SECOND_CHAN_NONE)` และใช้ MAC นี้เป็น `GATEWAY_MAC`
+5. **โหนดเซนเซอร์:** ไม่ต้องตั้ง MAC หรือช่อง Wi-Fi ของเกตเวย์ล่วงหน้า โหนดจะ broadcast heartbeat ไล่ช่อง 1–13 หาเกตเวย์ เรียนรู้ MAC จาก ACK แล้วสลับเป็น unicast และสแกนใหม่เองถ้าเงียบเกิน 15 วินาที (รายละเอียดใน `docs/protocols.md`)
 6. บิลด์และแฟลช: `pio run -d firmware/gateway -t upload && pio device monitor -d firmware/gateway`
 
-**หมายเหตุ TLS:** ทุกปลายทาง (NETPIE 8883, Gemini, Discord) ตรวจใบรับรองด้วย CA bundle ที่ฝังมากับ ESP32 ไม่มีการเรียก `setInsecure()` ในบิลด์ปกติ สำหรับการดีบักบนเครื่องตัวเองเท่านั้นที่บิลด์ด้วย `-DALLOW_INSECURE_TLS` เพื่อข้ามการตรวจ — ห้ามใช้ในการเดโม
+**หมายเหตุ TLS:** ทุกปลายทาง (EMQX 8883, Gemini, Discord) ตรวจใบรับรองด้วย CA bundle ที่ฝังมากับ ESP32 ไม่มีการเรียก `setInsecure()` ในบิลด์ปกติ สำหรับการดีบักบนเครื่องตัวเองเท่านั้นที่บิลด์ด้วย `-DALLOW_INSECURE_TLS` เพื่อข้ามการตรวจ — ห้ามใช้ในการเดโม
 
-### Topic ของ NETPIE
+### Topic ของ MQTT
 
 | Topic | ทิศทาง | ข้อมูล |
 |---|---|---|
-| `@msg/sdl/N<id>/telemetry` | เกตเวย์ → คลาวด์ | ค่าที่อ่านได้หนึ่งชุด: `node_id, seq, ts, node_ms, lux, r, g, b, c, cct` |
-| `@shadow/data/update` | เกตเวย์ → คลาวด์ ทุก 30 วินาที | `n1_lux, n1_cct, n1_rx, n1_seq, dist_mm, presence, lamp_mW, diffuser, nd, warm, pwm, safe, mode, target_lux, ai, buffered, dropped, heap, uptime_s` |
+| `@msg/sdl/gw/telemetry` | เกตเวย์ → คลาวด์ ทุก 2 วินาที | สถานะเกตเวย์: `uptime_s, wifi_up, wifi_code, rssi, wifi_ch, ip, wifi_retries, mqtt_fails, ntp, time, heap, heap_min, temp_c, reset, nodes, mode, safe, pwm, buffered, dropped` |
+| `@msg/sdl/sensor/telemetry` | เกตเวย์ → คลาวด์ ทุก heartbeat (2 วินาที) และทุกชุดค่าที่อ่านได้ | heartbeat: `node_id, seq, ts, node_ms, uptime_s, heap, heap_min, wifi_ch, reset, temp_c, tx_acked, tx_attempts`; เมื่อไดรเวอร์เซนเซอร์เสร็จจะเพิ่ม `lux, r, g, b, c, cct` โดย `node_id` (`N1`, `N2`, …) บอกว่าเป็นโหนดไหน |
+| `@msg/sdl/gw/state` | เกตเวย์ → คลาวด์ ทุก 30 วินาที | snapshot ล่าสุดของทุกอย่าง: `n1_lux, n1_cct, n1_up_s, n1_heap, n1_temp_c, n1_sys_age_s, n1_rx, n1_seq, dist_mm, presence, lamp_mW, diffuser, nd, warm, pwm, safe, mode, target_lux, ai, buffered, dropped, heap, uptime_s, device` |
 | `@msg/sdl/cmd` | แดชบอร์ด → เกตเวย์ | `{"mode":"coding"}` หรือ `{"feedback":"too_bright"}` / `"too_dim"` |
 | `@msg/sdl/alert` | เกตเวย์ → คลาวด์ | ข้อความแจ้งเตือน (ส่งเข้า Discord ด้วย) |
-| `@msg/sdl/sys` | เกตเวย์ → คลาวด์ ทุก 10 วินาที | สถานะระบบ: `uptime_s, wifi_up, wifi_code, rssi, wifi_ch, ip, wifi_retries, mqtt_fails, ntp, time, heap, heap_min, temp_c, reset, nodes, mode, safe, pwm, buffered, dropped` |
-| `@msg/sdl/status` | เกตเวย์ → คลาวด์ (retained) | `"online"` / `"offline"` — `online` ส่งตอนเชื่อมต่อสำเร็จ ส่วน `offline` เป็น MQTT Last Will ที่ broker ส่งแทนเมื่อเกตเวย์ขาดการเชื่อมต่อเกิน keepalive 30 วินาที แดชบอร์ดจึงรู้สถานะลิงก์ทันทีที่ subscribe |
+| `@msg/sdl/gateway/status` | เกตเวย์ → คลาวด์ (retained) | `"online"` / `"offline"` — `online` ส่งตอนเชื่อมต่อสำเร็จ ส่วน `offline` เป็น MQTT Last Will ที่ broker ส่งแทนเมื่อเกตเวย์ขาดการเชื่อมต่อเกิน keepalive 30 วินาที แดชบอร์ดจึงรู้สถานะลิงก์ทันทีที่ subscribe |
+| `@msg/sdl/sensor/status` | เกตเวย์ → คลาวด์ (retained) | presence ของโหนด: `{"ts":…,"N1":"online"}` — เขียนแทนโหนดที่ไม่มี MQTT session; `online` เมื่อมี heartbeat/ค่าที่วัดได้ภายใน 10 วินาที, `offline` เมื่อเงียบกว่านั้น; เขียนซ้ำเมื่อเปลี่ยน, ตอนเชื่อมต่อใหม่ และทุก 30 วินาที |
 
-Topic ที่ขึ้นต้นด้วย `@msg/` ทั้งหมด (`cmd`, `alert`, `sys`, `status`) ต้องประกาศเป็น alias ของ device `gateway` ในหน้า NETPIE ก่อน ไม่งั้น broker จะปฏิเสธ publish/subscribe
+ทั้งหมดเป็น topic MQTT ธรรมดาบน EMQX ของเรา (`@` นำหน้าได้ตามสเปก) จึงไม่ต้องลงทะเบียน alias แบบ NETPIE อีก จำไว้ว่า compose เปิดเฉพาะ 1883 บน loopback — client ภายนอกต้องผ่าน NPMplus ที่พอร์ต 8883 (TLS) หรือ wss
 
-### โปรเจกต์บน NETPIE
+เฟิร์มแวร์ publish ด้วย QoS 0 และ retain เฉพาะ `@msg/sdl/gateway/status` กับ `@msg/sdl/sensor/status`; heartbeat ของโหนดไม่ได้ถูกเก็บย้อนหลังตอนออฟไลน์ (ค่าล่าสุดยังอยู่ใน `@msg/sdl/gw/state`)
 
-Project `SmartDeskLight`, group `sdl-group`, device `gateway` (เฟิร์มแวร์นี้) และ `dashboard` (ฝั่งแดชบอร์ดที่ publish `@msg/sdl/cmd`) device `gateway` มี schema ที่เปิด Feed ไว้สำหรับ `n1_lux, n1_cct, lamp_mW, pwm, target_lux, dist_mm, presence, buffered` (เป็นตัวเลขทั้งหมด) ฟิลด์อื่นยังอยู่ใน shadow แต่ไม่ถูกเก็บลง Feed การอัปเดต shadow ทุก 30 วินาทีอยู่ในโควตาฟรีอย่างสบาย
+### ตัวชี้วัดที่อ่านได้จาก state snapshot
 
-### ตัวชี้วัดที่อ่านได้จาก shadow
-
-- **อัตราการส่งแพ็กเก็ตสำเร็จ:** `n1_rx / n1_seq` (จำนวนแพ็กเก็ตไม่ซ้ำที่ได้รับ ÷ จำนวนที่โหนดส่ง)
+- **อัตราการส่งแพ็กเก็ตสำเร็จ:** `n1_rx / n1_seq` (จำนวนแพ็กเก็ต telemetry ไม่ซ้ำที่ได้รับ ÷ seq ล่าสุดของโหนด) และดู `tx_acked / tx_attempts` จาก heartbeat ของโหนดเอง
 - **Uptime:** `uptime_s`; **กำลังไฟแต่ละโหมด:** `lamp_mW` คู่กับ `mode`, `pwm` และฟิลด์ฟิลเตอร์
 - **เก็บแล้วส่งต่อ:** `buffered` เพิ่มขึ้นขณะออฟไลน์ และลดลงเหลือ 0 หลังเชื่อมต่อได้อีกครั้ง ส่วน `dropped` ต้องเป็น 0 เมื่อขาดการเชื่อมต่อไม่เกินราว 5 นาที
 
 ### ทดสอบการขยายระบบ
 
-ตั้ง `cfg::kSimulatedNodes = 2` ใน `config.h` เพื่อเพิ่มโหนดจำลอง 101 และ 102 คู่กับโหนดจริง 1 แต่ละโหนดจะมี topic `N<id>` และฟิลด์ `n<id>_*` ใน shadow เป็นของตัวเอง
+ตั้ง `cfg::kSimulatedNodes = 2` ใน `config.h` เพื่อเพิ่มโหนดจำลอง 101 และ 102 คู่กับโหนดจริง 1 ทุกโหนดใช้ `@msg/sdl/sensor/telemetry` ร่วมกันและแยกด้วย `node_id` ส่วน snapshot จะมีฟิลด์ `n<id>_*` ของแต่ละโหนด

@@ -5,8 +5,9 @@
 //   red, fast blink        Wi-Fi attempt failed (SSID missing, wrong password, 5 GHz AP)
 //   cyan, slow blink       Wi-Fi up, waiting for NTP before TLS may start
 //   amber, slow blink      clock set, MQTT/TLS not connected yet
-//   magenta, slow blink    cloud up, but no fresh data from the sensor node
-//   green, solid           cloud up and the primary sensor node is reporting
+//   magenta, slow blink    primary node is silent (no telemetry *and* no heartbeat)
+//   violet, slow pulse     node alive (heartbeats arriving), but no sensor reading yet
+//   green, solid           cloud up and the primary sensor node is reporting readings
 //   blue, double blink     safe state from the stop button (overrides the link colours)
 //
 // Priority: safe > Wi-Fi > clock > MQTT > node freshness. One pixel, so this is
