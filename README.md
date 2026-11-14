@@ -10,7 +10,7 @@
 
 [![บิลด์เฟิร์มแวร์](https://github.com/E3-Embed/SmartDeskLight/actions/workflows/build.yml/badge.svg)](https://github.com/E3-Embed/SmartDeskLight/actions/workflows/build.yml)
 ![ESP32](https://img.shields.io/badge/ESP32-FreeRTOS-E7352C?logo=espressif&logoColor=white)
-![NETPIE2020](https://img.shields.io/badge/cloud-NETPIE2020-16A34A)
+![EMQX](https://img.shields.io/badge/cloud-EMQX%20(self--hosted)-16A34A)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **[สถาปัตยกรรม](#สถาปัตยกรรม)** · **[ลำดับการทำงาน](#ลำดับการทำงาน)** · **[หลักการทำงาน](#หลักการทำงาน)** · **[เริ่มต้นใช้งาน](#เริ่มต้นใช้งาน)** · **[เอกสาร](#เอกสาร)** · **[ทีม](#ทีม)**
@@ -42,7 +42,7 @@ flowchart TB
     end
 
     subgraph CLOUD["คลาวด์และบริการ"]
-      N[("NETPIE2020<br/>Feed · Dashboard")]
+      N[("EMQX<br/>MQTT · Dashboard")]
       A{{"LLM API"}}
       D["Discord"]
     end
@@ -93,7 +93,7 @@ sequenceDiagram
   participant G as เกตเวย์
   participant L as โคมไฟ
   participant A as LLM API
-  participant P as NETPIE2020
+  participant P as EMQX
 
   rect rgb(18, 23, 30)
     Note over N,G: ตรวจวัด — ทุกวินาที
@@ -102,7 +102,7 @@ sequenceDiagram
     opt ไม่ได้รับ ACK ภายใน 100 ms
       N->>G: ส่งซ้ำ (สูงสุด 3 ครั้ง)
     end
-    G->>P: MQTTS publish (ข้อมูลดิบ + shadow)
+    G->>P: MQTTS publish (telemetry + state)
   end
 
   rect rgb(22, 27, 34)
@@ -164,17 +164,17 @@ pio run -d firmware/gateway -t upload
 pio run -d firmware/sensor_node -t upload
 ```
 
-ต้องมี [PlatformIO](https://platformio.org/), บอร์ด ESP32 สองบอร์ด และ device บน NETPIE2020 — ดูรายละเอียดในเอกสารด้านล่าง
+ต้องมี [PlatformIO](https://platformio.org/), บอร์ด ESP32-S3 DevKitC-1 สองบอร์ด และบรอคเกอร์ MQTT (โปรเจกต์ใช้ EMQX ที่รันเองจาก `infra/`) — ดูรายละเอียดในเอกสารด้านล่าง
 
 ## เอกสาร
 
 | เอกสาร | เนื้อหา |
 |---|---|
 | [ฮาร์ดแวร์](docs/hardware.md) | รายการอุปกรณ์ ผังขา ไฟเลี้ยง และความปลอดภัย |
-| [โปรโตคอล](docs/protocols.md) | แพ็กเก็ต ESP-NOW, topic ของ NETPIE, คำขอและคำตอบของ AI |
+| [โปรโตคอล](docs/protocols.md) | แพ็กเก็ต ESP-NOW, topic ของ MQTT, คำขอและคำตอบของ AI |
 | [เฟิร์มแวร์](docs/firmware.md) | งาน FreeRTOS และหัวข้อ Embedded Engineering Depth |
 | [การทดสอบ](docs/testing.md) | ตัวชี้วัด วิธีทดสอบ และผลลัพธ์ |
-| [แดชบอร์ด](dashboard/README.md) | การตั้งค่า device, dashboard และการแจ้งเตือนบน NETPIE2020 |
+| [แดชบอร์ด](dashboard/README.md) | topic ที่แดชบอร์ดต้อง subscribe/publish (ยังไม่ได้ implement) |
 | [แนวทางการร่วมพัฒนา](CONTRIBUTING.md) | การตั้งชื่อ branch รูปแบบ commit และนโยบายข้อมูลลับ |
 
 ## ทีม

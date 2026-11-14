@@ -5,11 +5,13 @@
 #define WIFI_SSID        "your-hotspot"
 #define WIFI_PASSWORD    "your-password"
 
-// ---- NETPIE2020 device (Device > Key): MQTTS mqtt.netpie.io:8883
-// The MQTT client id is cfg::kDeviceName in src/config.h and must match the Client ID
-// you registered for the device in the NETPIE console — it is not set here.
-#define NETPIE_TOKEN     "device-token"
-#define NETPIE_SECRET    "device-secret"
+// ---- MQTT device credentials: username (NETPIE_TOKEN) and password (NETPIE_SECRET)
+// for the gateway on the self-hosted EMQX. The names are kept from the NETPIE layout so
+// existing secrets.h files keep working.
+// The MQTT client id is cfg::kDeviceName in src/config.h; it must be a unique id on the
+// broker (the EMQX default authenticator does not pin it, but duplicates kick each other off).
+#define NETPIE_TOKEN     "device-username"
+#define NETPIE_SECRET    "device-password"
 
 // ---- AI (Google Gemini API key) and Discord webhook; leave "" to disable
 #define LLM_API_KEY      ""
