@@ -25,14 +25,17 @@ RingBuffer<app::TelemetryRecord, cfg::kBufferSlots> backlog;  // readings waitin
 
 uint32_t lastWifiTryMs = 0;
 uint32_t lastMqttTryMs = 0;
-uint32_t lastShadowMs = 0;
-uint32_t lastSystemMs = 0;
+uint32_t lastStateMs = 0;
+uint32_t lastGwTelemetryMs = 0;
+uint32_t lastPresenceMs = 0;
+uint32_t lastPresenceSig = 0;
 uint32_t lastAiMs = 0;
 uint32_t lastNtpRetryMs = 0;
 bool timeConfigured = false;
 bool wasOnline = false;
 uint32_t offlineSinceMs = 0;
-bool systemDue = true;       // publish a system report as soon as MQTT comes up
+bool gwTelemetryDue = true;  // publish gateway health as soon as MQTT comes up
+bool presenceDue = true;     // republish node presence (retained) on every connect
 uint32_t wifiRetries = 0;    // WiFi.reconnect() calls
 uint32_t mqttFails = 0;      // TLS or MQTT connect attempts that failed
 
@@ -57,7 +60,7 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
 }
 
 // ---------------------------------------------------------------- connections
-// Every TLS endpoint (NETPIE 8883, Google, Discord) is verified against the built-in
+// Every TLS endpoint (EMQX 8883, Google, Discord) is verified against the built-in
 // CA bundle, and chain verification compares the certificate's validity dates with
 // the system clock. Until NTP has set that clock, every handshake fails with
 // "certificate is not yet valid", so nothing may connect before the time is real.
@@ -105,14 +108,14 @@ bool ensureMqtt() {
   if (!tls.connected()) {
     if (!tls.connect(cfg::kMqttHost, cfg::kMqttPort)) {
       mqttFails++;
-      Serial.printf("[cloud] TLS connect to NETPIE failed (clock=%lld)\n",
+      Serial.printf("[cloud] TLS connect to the broker failed (clock=%lld)\n",
                     static_cast<long long>(time(nullptr)));
       return false;
     }
   }
 
-  // NETPIE2020: client id = device Client ID (cfg::kDeviceName), username = Token,
-  // password = Secret. A different id is rejected by the broker's key check.
+  // EMQX: client id = cfg::kDeviceName, username/password come from secrets.h (the macros
+  // keep their NETPIE names). Two sessions with the same client id kick each other off.
   // The Last Will is retained: when the gateway disappears without a clean DISCONNECT
   // (power cut, crash, radio gone past the 30 s keepalive), EMQX publishes "offline"
   // for us and every subscriber sees it.
@@ -128,8 +131,9 @@ bool ensureMqtt() {
   }
   mqtt.subscribe(cfg::kTopicCmd);
   xEventGroupSetBits(app::events, app::kBitMqttUp);
-  systemDue = true;  // report the fresh link immediately, then on the normal cadence
-  Serial.println("[cloud] MQTTS connected to NETPIE2020");
+  gwTelemetryDue = true;  // report the fresh link immediately, then on the normal cadence
+  presenceDue = true;     // the retained presence map must reflect this session, not the last
+  Serial.printf("[cloud] MQTTS connected to %s\n", cfg::kMqttHost);
   return true;
 }
 
@@ -151,14 +155,18 @@ bool publishReading(const app::TelemetryRecord &rec) {
 
   char payload[256];
   size_t n = serializeJson(doc, payload, sizeof(payload));
-  char topic[48];
-  snprintf(topic, sizeof(topic), "@msg/sdl/%s/telemetry", nodeName);
-  return mqtt.publish(topic, reinterpret_cast<const uint8_t *>(payload), n);
+  // One sensor topic for every node; node_id in the payload separates them, so a dashboard
+  // subscribes once instead of once per node.
+  return mqtt.publish(cfg::kTopicSensorTelemetry, reinterpret_cast<const uint8_t *>(payload), n);
 }
 
-void publishShadow() {
+// Full snapshot for dashboards, every kStatePeriodMs: what the lamp is doing plus the last
+// value seen from every node. Flat JSON — this used to be a NETPIE shadow document, but on a
+// self-hosted broker there is no shadow store to wrap it in.
+void publishState() {
   JsonDocument doc;
-  JsonObject d = doc["data"].to<JsonObject>();
+  JsonObject d = doc.to<JsonObject>();
+  d["device"] = cfg::kDeviceName;
   {
     app::StateLock lock;
     const auto &s = app::state;
@@ -168,9 +176,17 @@ void publishShadow() {
       char key[24];
       snprintf(key, sizeof(key), "n%u_lux", n.id);   d[key] = n.lux;
       snprintf(key, sizeof(key), "n%u_cct", n.id);   d[key] = n.cct;
-      snprintf(key, sizeof(key), "n%u_age_s", n.id); d[key] = (now - n.lastSeenMs) / 1000;
-      snprintf(key, sizeof(key), "n%u_rx", n.id);    d[key] = n.received;
-      snprintf(key, sizeof(key), "n%u_seq", n.id);   d[key] = n.lastSeq;
+      if (n.received > 0) {  // telemetry age only makes sense once telemetry has arrived
+        snprintf(key, sizeof(key), "n%u_age_s", n.id); d[key] = (now - n.lastSeenMs) / 1000;
+        snprintf(key, sizeof(key), "n%u_rx", n.id);    d[key] = n.received;
+        snprintf(key, sizeof(key), "n%u_seq", n.id);   d[key] = n.lastSeq;
+      }
+      if (n.sysSeen) {  // health heartbeat from the node itself
+        snprintf(key, sizeof(key), "n%u_up_s", n.id);      d[key] = n.uptimeS;
+        snprintf(key, sizeof(key), "n%u_heap", n.id);      d[key] = n.freeHeap;
+        snprintf(key, sizeof(key), "n%u_temp_c", n.id);    d[key] = n.tempCdeg / 10.0f;
+        snprintf(key, sizeof(key), "n%u_sys_age_s", n.id); d[key] = (now - n.lastSysMs) / 1000;
+      }
     }
     d["dist_mm"] = s.local.distOk ? s.local.distMm : 0;
     d["presence"] = s.local.presence ? 1 : 0;
@@ -192,9 +208,9 @@ void publishShadow() {
   d["heap"] = ESP.getFreeHeap();
   d["uptime_s"] = millis() / 1000;
 
-  char payload[1024];
+  char payload[2048];  // kMaxNodes entries with health keys; must stay <= mqtt buffer size
   size_t n = serializeJson(doc, payload, sizeof(payload));
-  mqtt.publish(cfg::kTopicShadow, reinterpret_cast<const uint8_t *>(payload), n);
+  mqtt.publish(cfg::kTopicState, reinterpret_cast<const uint8_t *>(payload), n);
 }
 
 // Which kind of reset brought the firmware back — the first thing to look at after a mystery reboot.
@@ -214,10 +230,10 @@ const char *resetReasonName(esp_reset_reason_t r) {
   }
 }
 
-// Link and health telemetry on its own topic, every kSystemPeriodMs. Keys stay flat so a
-// NETPIE Feed can pick them up without nesting. "uptime_s" resetting to a small number is
-// how a dashboard spots a reboot; "reset" says why.
-void publishSystem() {
+// Gateway health on its own topic, every kGwTelemetryPeriodMs. Keys stay flat so a dashboard
+// or a log pipeline can pick them up without nesting. "uptime_s" resetting to a small number
+// is how a dashboard spots a reboot; "reset" says why.
+void publishGatewayTelemetry() {
   JsonDocument doc;
   doc["device"] = cfg::kDeviceName;
   doc["uptime_s"] = millis() / 1000;
@@ -250,8 +266,84 @@ void publishSystem() {
 
   char payload[512];
   size_t n = serializeJson(doc, payload, sizeof(payload));
-  if (!mqtt.publish(cfg::kTopicSystem, reinterpret_cast<const uint8_t *>(payload), n)) {
-    Serial.println("[cloud] system report publish failed");
+  if (!mqtt.publish(cfg::kTopicGwTelemetry, reinterpret_cast<const uint8_t *>(payload), n)) {
+    Serial.println("[cloud] gateway telemetry publish failed");
+  }
+}
+
+// Sensor-node health, republished for the node that has no Wi-Fi stack of its own. Health
+// keys only: lux/cct appear here once the BH1750/TCS34725 drivers start sending telemetry,
+// so a zero never gets mistaken for a dark room.
+void publishNodeTelemetry(const app::NodeSysRecord &rec) {
+  JsonDocument doc;
+  char nodeName[8];
+  snprintf(nodeName, sizeof(nodeName), "N%u", rec.pkt.node_id);
+  doc["node_id"] = nodeName;
+  doc["seq"] = rec.pkt.seq;
+  if (rec.epoch) doc["ts"] = rec.epoch;  // wall clock when the gateway received it
+  doc["node_ms"] = rec.pkt.ts_ms;
+  doc["uptime_s"] = rec.pkt.uptime_s;
+  doc["heap"] = rec.pkt.free_heap;
+  doc["heap_min"] = rec.pkt.min_free_heap;
+  doc["wifi_ch"] = rec.pkt.channel;
+  doc["reset"] = resetReasonName(static_cast<esp_reset_reason_t>(rec.pkt.reset_reason));
+  doc["temp_c"] = rec.pkt.temp_cdeg / 10.0f;
+  doc["tx_acked"] = rec.pkt.tx_acked;
+  doc["tx_attempts"] = rec.pkt.tx_attempts;
+
+  char payload[320];
+  size_t n = serializeJson(doc, payload, sizeof(payload));
+  if (!mqtt.publish(cfg::kTopicSensorTelemetry, reinterpret_cast<const uint8_t *>(payload), n)) {
+    Serial.println("[cloud] node telemetry publish failed");
+  }
+}
+
+// Sensor presence, inferred from ESP-NOW traffic because the nodes have no MQTT session of
+// their own. A node is online while heartbeats or readings keep arriving; the thresholds are
+// the same ones the status LED uses, so the light and the broker never disagree.
+bool nodeOnline(const app::NodeState &n, uint32_t now) {
+  return (n.sysSeen && now - n.lastSysMs < cfg::kNodeStaleMs) ||
+         (n.received > 0 && now - n.lastSeenMs < cfg::kNodeStaleMs);
+}
+
+// One bit per table slot for "known", one bit per slot at +16 for "online". Slots are stable
+// for the lifetime of a boot, so comparing signatures catches every transition.
+static_assert(cfg::kMaxNodes <= 16, "presence signature packs two bitsets into 32 bits");
+
+uint32_t presenceSignature() {
+  app::StateLock lock;
+  const uint32_t now = millis();
+  uint32_t sig = 0;
+  int slot = 0;
+  for (const auto &n : app::state.nodes) {
+    if (n.used) {
+      sig |= 1UL << slot;
+      if (nodeOnline(n, now)) sig |= 1UL << (slot + 16);
+    }
+    ++slot;
+  }
+  return sig;
+}
+
+// Retained, so a dashboard that subscribes later still sees who is online right away.
+void publishSensorStatus() {
+  JsonDocument doc;
+  doc["ts"] = app::nowEpoch();  // 0 until NTP; lets consumers age the map after a gateway outage
+  {
+    app::StateLock lock;
+    const uint32_t now = millis();
+    for (const auto &n : app::state.nodes) {
+      if (!n.used) continue;
+      char key[8];
+      snprintf(key, sizeof(key), "N%u", n.id);
+      doc[key] = nodeOnline(n, now) ? "online" : "offline";
+    }
+  }
+  char payload[256];
+  const size_t len = serializeJson(doc, payload, sizeof(payload));
+  if (!mqtt.publish(cfg::kTopicSensorStatus, reinterpret_cast<const uint8_t *>(payload), len,
+                    true)) {
+    Serial.println("[cloud] sensor status publish failed");
   }
 }
 
@@ -356,7 +448,7 @@ void updateOnlineState(bool online) {
 
 void task(void *) {
   // E5: verify every endpoint against the CA bundle embedded in the firmware.
-  // NETPIE's 8883 chain ends at "USERTrust RSA Certification Authority" and Google /
+  // The EMQX certificate is issued by NPMplus/ACME; Google /
   // Discord use public roots too, so no PEM and no leaf fingerprint are needed.
 #if defined(ALLOW_INSECURE_TLS)
   tls.setInsecure();
@@ -367,7 +459,7 @@ void task(void *) {
   tls.setHandshakeTimeout(10);
   mqtt.setServer(cfg::kMqttHost, cfg::kMqttPort);
   mqtt.setCallback(onMqttMessage);
-  mqtt.setBufferSize(1024);
+  mqtt.setBufferSize(3072);  // must exceed the largest payload (the gw/state snapshot) plus header
   mqtt.setKeepAlive(cfg::kMqttKeepAliveSec);
   mqtt.setSocketTimeout(5);
 
@@ -385,15 +477,36 @@ void task(void *) {
     }
     if (mqttUp && !backlog.empty()) flushBacklog(10);  // a few per pass, keep MQTT responsive
 
-    if (mqttUp && millis() - lastShadowMs > cfg::kShadowPeriodMs) {
-      lastShadowMs = millis();
-      publishShadow();
+    // Node heartbeats: publish the freshest ones and drop the rest. If MQTT is down the
+    // queued ones are stale by the time it returns, and @msg/sdl/gw/state carries the latest
+    // health values anyway.
+    app::NodeSysRecord srec;
+    while (xQueueReceive(app::qCloudSys, &srec, 0) == pdTRUE) {
+      if (mqttUp) publishNodeTelemetry(srec);
     }
 
-    if (mqttUp && (systemDue || millis() - lastSystemMs >= cfg::kSystemPeriodMs)) {
-      systemDue = false;
-      lastSystemMs = millis();
-      publishSystem();
+    // Node presence, retained on sdl/sensor/status: republish on any transition, after a
+    // reconnect, and periodically so "ts" stays fresh.
+    if (mqttUp) {
+      const uint32_t sig = presenceSignature();
+      if (presenceDue || sig != lastPresenceSig ||
+          millis() - lastPresenceMs >= cfg::kPresencePeriodMs) {
+        publishSensorStatus();
+        lastPresenceSig = sig;
+        lastPresenceMs = millis();
+        presenceDue = false;
+      }
+    }
+
+    if (mqttUp && millis() - lastStateMs > cfg::kStatePeriodMs) {
+      lastStateMs = millis();
+      publishState();
+    }
+
+    if (mqttUp && (gwTelemetryDue || millis() - lastGwTelemetryMs >= cfg::kGwTelemetryPeriodMs)) {
+      gwTelemetryDue = false;
+      lastGwTelemetryMs = millis();
+      publishGatewayTelemetry();
     }
 
     handleAlerts(wifiUp && tlsReady, mqttUp);
