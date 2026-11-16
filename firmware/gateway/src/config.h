@@ -68,19 +68,18 @@ constexpr const char *kNtpServer2 = "time.nist.gov";
 constexpr const char *kNtpServer3 = "pool.ntp.org";
 
 // ---------------------------------------------------------------- cloud
-// constexpr const char *kMqttHost = "mqtt.netpie.io";
+// Self-hosted EMQX (infra/docker-compose.yml), reached through the NPMplus TLS proxy. Topic
+// names keep the @msg/sdl prefix from the original NETPIE layout, but there are no device
+// aliases or @shadow conventions to honour on a broker you run yourself.
 constexpr const char *kMqttHost = "gw.embed.rachatat.com";
-constexpr uint16_t kMqttPort = 8883;  // NETPIE2020 MQTTS on the publicly-trusted chain
-// 8883 presents a certificate that chains to "USERTrust RSA Certification Authority",
-// which ships in the ESP32's built-in CA bundle (see ca_bundle.h), so the firmware verifies
-// the broker with a normal chain check: no PEM, no leaf fingerprint. Port 1884 serves the
-// same broker on NETPIE's private "NEXPIE Device Broker" CA, which no public root can verify —
-// that is why the old code had to pin the leaf certificate instead.
-constexpr uint32_t kShadowPeriodMs = 30000;  // NETPIE free tier: ~86k shadow writes/month (quota 500k)
-// System telemetry every 10 s is ~260k messages/month; raise it if the free-tier quota gets tight.
-constexpr uint32_t kSystemPeriodMs = 10000;  // Wi-Fi/MQTT/heap/uptime status on @msg/sdl/sys
+constexpr uint16_t kMqttPort = 8883;  // NPMplus terminates TLS; EMQX itself listens on loopback
+// NPMplus serves a publicly-trusted (ACME) certificate that chains to a root in the ESP32's
+// built-in bundle (see ca_bundle.h), so the firmware does a normal chain check: no PEM and no
+// leaf fingerprint in secrets.h.
+constexpr uint32_t kStatePeriodMs = 10000;        // full snapshot on @msg/sdl/gw/state
+constexpr uint32_t kGwTelemetryPeriodMs = 2000;   // gateway health on @msg/sdl/gw/telemetry (matches the node heartbeat)
 // MQTT PINGREQ interval. The broker declares us dead after 1.5x this, which is also how
-// long the retained Last Will on @msg/sdl/status takes to flip to "offline".
+// long the retained Last Will on @msg/sdl/gateway/status takes to flip to "offline".
 constexpr uint16_t kMqttKeepAliveSec = 30;
 constexpr uint32_t kAiPeriodMs = 5UL * 60UL * 1000UL;
 constexpr int kBufferSlots = 300;        // store-and-forward: ~5 min of 1 Hz readings (~11 kB)
@@ -88,10 +87,18 @@ constexpr const char *kAiModel = "gemini-3.5-flash-lite";  // ~2 s per request; 
 constexpr long kUtcOffsetSec = 7L * 3600L;  // Asia/Bangkok
 constexpr const char *kTopicCmd = "@msg/sdl/cmd";
 constexpr const char *kTopicAlert = "@msg/sdl/alert";
-constexpr const char *kTopicShadow = "@shadow/data/update";
-constexpr const char *kTopicSystem = "@msg/sdl/sys";
+// One topic per source. Sensor nodes have no Wi-Fi stack of their own, so the gateway
+// republishes on their behalf and node_id says which one it was.
+constexpr const char *kTopicGwTelemetry = "@msg/sdl/gw/telemetry";
+constexpr const char *kTopicSensorTelemetry = "@msg/sdl/sensor/telemetry";
+constexpr const char *kTopicState = "@msg/sdl/gw/state";
 // Retained "online"/"offline", driven by the MQTT Last Will, so any dashboard that
 // subscribes late still learns the current link state immediately.
-constexpr const char *kTopicStatus = "@msg/sdl/status";
+constexpr const char *kTopicStatus = "@msg/sdl/gateway/status";
+// Retained presence map for the sensor nodes, maintained by the gateway because they have no
+// MQTT session of their own: {"ts":...,"N1":"online","N2":"offline"}. Republished on every
+// transition and refreshed every kPresencePeriodMs so "ts" stays usable as an age check.
+constexpr const char *kTopicSensorStatus = "@msg/sdl/sensor/status";
+constexpr uint32_t kPresencePeriodMs = 30000;
 
 }  // namespace cfg

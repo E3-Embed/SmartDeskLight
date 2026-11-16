@@ -33,12 +33,25 @@ struct NodeState {
   bool used = false;
   uint8_t id = 0;
   uint32_t lastSeq = 0;
-  uint32_t lastSeenMs = 0;
+  uint32_t lastSeenMs = 0;  // last *telemetry* packet; ControlTask closes the loop on this
   uint32_t received = 0;    // unique packets (for packet delivery rate)
   uint32_t duplicates = 0;  // retries that arrived twice
   float lux = 0;
   uint16_t cct = 0;
   bool lostAlerted = false;
+
+  // Self-reported health from SDL_MSG_SYS heartbeats. Kept separate from lastSeenMs on
+  // purpose: a node that is alive but has no sensor data must not look like fresh lux.
+  bool sysSeen = false;
+  uint32_t lastSysMs = 0;
+  uint32_t uptimeS = 0;
+  uint32_t freeHeap = 0;
+  uint32_t minFreeHeap = 0;
+  uint32_t txAttempts = 0;
+  uint32_t txAcked = 0;
+  uint8_t resetReason = 0;  // esp_reset_reason_t on the node
+  uint8_t nodeChannel = 0;
+  int16_t tempCdeg = 0;     // SoC temperature as reported by the node, 0.1 C units
 };
 
 struct LocalSensors {
@@ -82,6 +95,14 @@ struct TelemetryRecord {
   uint32_t epoch;  // gateway wall-clock time when received (0 if NTP not synced yet)
 };
 
+// A node health heartbeat plus the gateway's wall clock when it arrived. Not buffered while
+// offline: a 2 s heartbeat has no value once it is minutes old, and the 30 s state snapshot
+// already carries the latest health values.
+struct NodeSysRecord {
+  SdlSysStatus pkt;
+  uint32_t epoch;
+};
+
 struct Alert {
   char text[112];
 };
@@ -97,8 +118,10 @@ constexpr EventBits_t kBitWifiTried = BIT3;
 extern State state;
 extern SemaphoreHandle_t stateMutex;
 extern QueueHandle_t qTelemetry;  // radio callback -> EspNowRxTask   (SdlTelemetry)
+extern QueueHandle_t qNodeSys;    // radio callback -> EspNowRxTask   (SdlSysStatus)
 extern QueueHandle_t qControl;    // ISR / cloud -> ControlTask       (ControlEvent)
 extern QueueHandle_t qCloud;      // EspNowRxTask -> CloudTask        (TelemetryRecord)
+extern QueueHandle_t qCloudSys;   // EspNowRxTask -> CloudTask        (NodeSysRecord)
 extern QueueHandle_t qAlerts;     // any task -> CloudTask            (Alert)
 extern EventGroupHandle_t events;
 
