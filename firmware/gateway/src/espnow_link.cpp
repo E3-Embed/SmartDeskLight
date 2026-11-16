@@ -22,6 +22,13 @@ void sendAck(const uint8_t *mac, uint8_t nodeId, uint32_t seq) {
   esp_now_send(mac, reinterpret_cast<const uint8_t *>(&ack), sizeof(ack));
 }
 
+bool isBroadcastMac(const uint8_t *mac) {
+  for (int i = 0; i < 6; i++) {
+    if (mac[i] != 0xFF) return false;
+  }
+  return true;
+}
+
 // Runs in the Wi-Fi task context: keep it short. ACK immediately (the node waits at most
 // 100 ms), then hand the packet to EspNowRxTask through a queue. The first packet a node
 // sends is a broadcast heartbeat on the channel it guessed, so this also answers the
@@ -29,19 +36,39 @@ void sendAck(const uint8_t *mac, uint8_t nodeId, uint32_t seq) {
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
 void onRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
   const uint8_t *mac = info->src_addr;
+  const bool broadcast = isBroadcastMac(info->des_addr);
 #else
 void onRecv(const uint8_t *mac, const uint8_t *data, int len) {
+  const bool broadcast = true;  // this core does not expose the destination address
 #endif
-  if (len == static_cast<int>(sizeof(SdlTelemetry))) {
+  // Dispatch on the header, and use the length only as a sanity check. Deciding purely by
+  // length would silently parse one message type as another as soon as a field change made
+  // two sizes equal (the static_asserts in message.h make that unlikely, this makes it safe).
+  if (len < 2) return;
+  if (data[0] != SDL_PROTO_VERSION) return;
+  const uint8_t type = data[1];
+
+  if (type == SDL_MSG_TELEMETRY && len == static_cast<int>(sizeof(SdlTelemetry))) {
     SdlTelemetry pkt;
     memcpy(&pkt, data, sizeof(pkt));
-    if (pkt.version != SDL_PROTO_VERSION || pkt.type != SDL_MSG_TELEMETRY) return;
     sendAck(mac, pkt.node_id, pkt.seq);
     xQueueSend(app::qTelemetry, &pkt, 0);
-  } else if (len == static_cast<int>(sizeof(SdlSysStatus))) {
+  } else if (type == SDL_MSG_SYS && len == static_cast<int>(sizeof(SdlSysStatus))) {
     SdlSysStatus sys;
     memcpy(&sys, data, sizeof(sys));
-    if (sys.version != SDL_PROTO_VERSION || sys.type != SDL_MSG_SYS) return;
+
+    // A probe carries the channel the node is transmitting on, and adjacent 2.4 GHz channels
+    // overlap: a probe sent on channel 5 can be received by a gateway sitting on 6. ACKing it
+    // would make the node lock onto 5 and unicast into the void, so refuse anything that
+    // disagrees with our channel. Only probes (broadcast) are checked — once linked the node
+    // sends unicast, and rejecting those over a transient channel report would cause churn.
+    const uint8_t ownChannel = WiFi.channel();
+    if (broadcast && sys.channel != 0 && ownChannel != 0 && sys.channel != ownChannel) {
+      Serial.printf("[espnow] probe from ch%u ignored, we are on ch%u\n", sys.channel,
+                    ownChannel);
+      return;  // no ACK: the node keeps scanning and finds our real channel
+    }
+
     sendAck(mac, sys.node_id, sys.seq);
     xQueueSend(app::qNodeSys, &sys, 0);
   }
