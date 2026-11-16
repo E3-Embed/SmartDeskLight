@@ -147,7 +147,7 @@ export function LuxPanel({
     };
   }, [samples, now, range.ms, domainMax]);
 
-  const yLabels = [1, 0].map((fraction) => ({
+  const yLabels = [1, 0.5, 0].map((fraction) => ({
     value: fraction,
     top: (1 - fraction) * 100,
     text: Math.round(domainMax * fraction).toLocaleString("en-US"),
@@ -339,7 +339,12 @@ export function CctPanel({ samples, now, range, derived, className = "" }: Panel
     y: toY(sample.targetCct),
   }));
 
-  const yLabels: { value: number; top: number; text: string }[] = [];
+  const mid = Math.round((min + Math.max(max, min + 1000)) / 200) * 100;
+  const yLabels = [max, mid, min].map((value) => ({
+    value,
+    top: toY(value),
+    text: value.toLocaleString("en-US"),
+  }));
 
   return (
     <section className={`card flex min-h-0 flex-col overflow-hidden ${className}`}>
