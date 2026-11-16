@@ -174,7 +174,7 @@ pio run -d firmware/sensor_node -t upload
 | [โปรโตคอล](docs/protocols.md) | แพ็กเก็ต ESP-NOW, topic ของ NETPIE, คำขอและคำตอบของ AI |
 | [เฟิร์มแวร์](docs/firmware.md) | งาน FreeRTOS และหัวข้อ Embedded Engineering Depth |
 | [การทดสอบ](docs/testing.md) | ตัวชี้วัด วิธีทดสอบ และผลลัพธ์ |
-| [แดชบอร์ด](dashboard/README.md) | การตั้งค่า device, dashboard และการแจ้งเตือนบน NETPIE2020 |
+| [แดชบอร์ด](dashboard/README.md) | เว็บแดชบอร์ด Next.js (mock/MQTT), การตั้งค่า device และการแจ้งเตือนบน NETPIE2020 |
 | [แนวทางการร่วมพัฒนา](CONTRIBUTING.md) | การตั้งชื่อ branch รูปแบบ commit และนโยบายข้อมูลลับ |
 
 ## ทีม
