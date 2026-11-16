@@ -1,16 +1,22 @@
-// SmartDeskLight — Sensor Node (ESP32 A)
+// SmartDeskLight — Sensor Node (ESP32-S3 DevKitC-1)
 //
-// Bring-up firmware: links to the gateway over ESP-NOW and sends a health heartbeat
-// (SDL_MSG_SYS) with seq + ACK + retry (E4). Real sensor readings plug into
-// buildTelemetry() once the register-level BH1750/TCS34725 drivers exist (E8).
+// Links to the gateway over ESP-NOW and sends two streams on the same ACK/retry path (E4):
+//   SDL_MSG_SYS       health heartbeat every kHeartbeatMs — proves the link, reports uptime,
+//                     heap, reset reason, channel, SoC temperature and the TX success ratio
+//   SDL_MSG_TELEMETRY one reading set every kSensorPeriodMs — lux and RGBC from the I2C
+//                     sensors behind the seam in sensors.h
 //
 // No gateway MAC or channel is configured here. The node broadcasts a probe on channels
 // 1..13 until one is answered, learns the gateway MAC from the ACK's source address, then
 // talks unicast. That is what lets the link come up when the gateway sits on an access
 // point channel the node could not know in advance — and it recovers by itself if the
 // gateway later reboots onto another channel.
+//
+// Timing rules for anything added to loop(): the radio is polled from this task, and every
+// send blocks for up to SDL_ACK_TIMEOUT_MS per attempt while it waits for its ACK. Keep any
+// new work shorter than nodecfg::kSensorReadBudgetMs; anything slower belongs in its own
+// task feeding a queue.
 #include <Arduino.h>
-#include <Wire.h>  // I2C for BH1750 + TCS34725 (own drivers, E8)
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_system.h>
@@ -19,6 +25,7 @@
 
 #include "message.h"
 #include "node_config.h"
+#include "sensors.h"
 #include "status_led.h"
 
 namespace {
@@ -36,13 +43,16 @@ struct AckInfo {
 AckInfo gAck;
 portMUX_TYPE gAckMux = portMUX_INITIALIZER_UNLOCKED;
 
-uint32_t gSeq = 0;
+uint32_t gSeq = 0;  // global packet counter: ACKs carry only (node_id, seq), so every packet
+                    // of any type gets a unique number. Do not split this per message type.
 uint32_t gTxAttempts = 0;
 uint32_t gTxAcked = 0;
 uint8_t gGatewayMac[6] = {};
 uint8_t gLinkChannel = 0;
 bool gLinked = false;
-uint32_t gLastTxMs = 0;
+uint32_t gLastHeartbeatMs = 0;
+uint32_t gLastSensorMs = 0;
+uint32_t gSensorMisses = 0;
 uint32_t gLastScanMs = 0;
 esp_reset_reason_t gResetReason = ESP_RST_UNKNOWN;
 
@@ -111,6 +121,22 @@ static SdlSysStatus buildHeartbeat(uint32_t seq) {
   // Internal sensor: absolute values are offset and vary per chip, but the trend tracks the
   // die temperature, which is what tells you the node is cooking in a closed enclosure.
   p.temp_cdeg = static_cast<int16_t>(lroundf(temperatureRead() * 10.0f));
+  return p;
+}
+
+static SdlTelemetry buildTelemetry(uint32_t seq, const SensorSample &s) {
+  SdlTelemetry p = {};
+  p.version = SDL_PROTO_VERSION;
+  p.type = SDL_MSG_TELEMETRY;
+  p.node_id = nodecfg::kNodeId;
+  p.seq = seq;
+  p.ts_ms = millis();
+  p.lux = s.lux;
+  p.r = s.r;
+  p.g = s.g;
+  p.b = s.b;
+  p.c = s.c;
+  p.cct = s.cct;
   return p;
 }
 
@@ -196,9 +222,8 @@ void setup() {
   esp_now_register_recv_cb(onRecv);
 
   gLastScanMs = millis();
+  sensors::begin();  // bus + probe; the drivers themselves are still TODO in sensors.cpp
   linkUp();
-  // TODO: Wire.begin(nodecfg::kPinSda, nodecfg::kPinScl), init BH1750 (own driver) and
-  // TCS34725, then send SdlTelemetry alongside the heartbeat
 }
 
 void loop() {
@@ -221,23 +246,44 @@ void loop() {
     return;
   }
 
-  if (now - gLastTxMs < nodecfg::kHeartbeatMs) {
-    delay(10);
-    return;
+  // ---- readings, on their own cadence. Only sent when the sensor actually answered: a
+  // zero lux that reaches the gateway reads as a dark room and drives the lamp to full
+  // power, so a failed read is skipped (and reported) rather than padded with zeros.
+  if (now - gLastSensorMs >= nodecfg::kSensorPeriodMs) {
+    gLastSensorMs = now;
+    SensorSample s;
+    if (sensors::lightSensorPresent() && sensors::read(s) && s.bh1750Ok) {
+      gSensorMisses = 0;
+      SdlTelemetry pkt = buildTelemetry(++gSeq, s);
+      if (!sendAndWait(gGatewayMac, &pkt, sizeof(pkt), pkt.seq, 1 + SDL_MAX_RETRY,
+                       SDL_ACK_TIMEOUT_MS, gGatewayMac)) {
+        Serial.printf("[sensor] telemetry seq=%lu not acked\n",
+                      static_cast<unsigned long>(pkt.seq));
+      }
+    } else if (++gSensorMisses % 30 == 1) {
+      Serial.printf("[sensor] no reading (%lu in a row)\n",
+                    static_cast<unsigned long>(gSensorMisses));
+    }
   }
-  gLastTxMs = now;
 
-  SdlSysStatus pkt = buildHeartbeat(++gSeq);
-  const bool acked = sendAndWait(gGatewayMac, &pkt, sizeof(pkt), pkt.seq, 1 + SDL_MAX_RETRY,
-                                 SDL_ACK_TIMEOUT_MS, gGatewayMac);
-  status_led::setLinkState(acked ? status_led::LinkState::Linked
-                                 : status_led::LinkState::Retrying);
-  Serial.printf("[node] seq=%lu ch=%u ack=%d up=%lus heap=%lu min=%lu reset=%u tx=%lu/%lu\n",
-                static_cast<unsigned long>(pkt.seq), gLinkChannel, acked ? 1 : 0,
-                static_cast<unsigned long>(pkt.uptime_s),
-                static_cast<unsigned long>(pkt.free_heap),
-                static_cast<unsigned long>(pkt.min_free_heap),
-                static_cast<unsigned>(pkt.reset_reason),
-                static_cast<unsigned long>(gTxAttempts),
-                static_cast<unsigned long>(gTxAcked));
+  // ---- heartbeat, on its own cadence. It owns the link LED: readings may fail without
+  // making the link itself look broken.
+  if (now - gLastHeartbeatMs >= nodecfg::kHeartbeatMs) {
+    gLastHeartbeatMs = now;
+    SdlSysStatus pkt = buildHeartbeat(++gSeq);
+    const bool acked = sendAndWait(gGatewayMac, &pkt, sizeof(pkt), pkt.seq, 1 + SDL_MAX_RETRY,
+                                   SDL_ACK_TIMEOUT_MS, gGatewayMac);
+    status_led::setLinkState(acked ? status_led::LinkState::Linked
+                                   : status_led::LinkState::Retrying);
+    Serial.printf("[node] seq=%lu ch=%u ack=%d up=%lus heap=%lu min=%lu reset=%u tx=%lu/%lu\n",
+                  static_cast<unsigned long>(pkt.seq), gLinkChannel, acked ? 1 : 0,
+                  static_cast<unsigned long>(pkt.uptime_s),
+                  static_cast<unsigned long>(pkt.free_heap),
+                  static_cast<unsigned long>(pkt.min_free_heap),
+                  static_cast<unsigned>(pkt.reset_reason),
+                  static_cast<unsigned long>(gTxAttempts),
+                  static_cast<unsigned long>(gTxAcked));
+  }
+
+  delay(5);
 }

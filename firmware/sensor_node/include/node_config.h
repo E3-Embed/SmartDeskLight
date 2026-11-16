@@ -19,9 +19,19 @@ constexpr uint8_t kStatusLedBrightness = 2;  // the on-board pixel is blinding a
 constexpr int kPinSda = 8;
 constexpr int kPinScl = 9;
 
-// Health heartbeat period. Once the BH1750/TCS34725 drivers land, sensor telemetry runs at
-// 1 Hz; the heartbeat stays slower because it only exists to prove the link and report health.
+// Health heartbeat period. Readings go out at kSensorPeriodMs; the heartbeat stays slower
+// because it only exists to prove the link and report health.
 constexpr uint32_t kHeartbeatMs = 2000;
+
+// One reading set (BH1750 + TCS34725) per second, sent as SdlTelemetry.
+constexpr uint32_t kSensorPeriodMs = 1000;
+
+// How long one sensors::read() may block. The ACK window is SDL_ACK_TIMEOUT_MS (100 ms) and
+// the heartbeat is due every kHeartbeatMs, so a read anywhere near this budget already eats a
+// whole ACK window. If a sensor needs longer (TCS34725 integration time is configurable up to
+// 700 ms), do not raise this: sample it in its own task and hand the result to loop() through
+// a queue, otherwise heartbeats start timing out and the link can be declared lost.
+constexpr uint32_t kSensorReadBudgetMs = 50;
 
 // The gateway follows its access point's channel, which the node cannot know in advance.
 // At boot the node broadcasts a probe on each 2.4 GHz channel and keeps the one that answers.
