@@ -1,4 +1,9 @@
 // Shared message format: Sensor Node <-> Gateway over ESP-NOW
+//
+// Both firmwares include this file, so any change here is a wire-format change: bump
+// SDL_PROTO_VERSION and reflash node and gateway together. The gateway also learns a packet's
+// type from its header, and falls back on the length — the static_asserts at the bottom keep
+// the three sizes distinct so a length check can never confuse two message types.
 #pragma once
 #include <stdint.h>
 
@@ -53,3 +58,16 @@ typedef struct __attribute__((packed)) {
   uint8_t  channel;        // Wi-Fi channel the node is using
   int16_t  temp_cdeg;      // SoC temperature in 0.1 C (internal sensor; coarse, relative only)
 } SdlSysStatus;
+
+// Wire sizes, checked at compile time on both firmwares. If one of these fires, you changed a
+// packet: bump SDL_PROTO_VERSION and update the matching static_assert — do not just relax it,
+// because an older peer will otherwise parse your fields into the wrong places.
+static_assert(sizeof(SdlTelemetry) == 25, "SdlTelemetry wire size changed");
+static_assert(sizeof(SdlSysStatus) == 35, "SdlSysStatus wire size changed");
+static_assert(sizeof(SdlAck) == 7, "SdlAck wire size changed");
+// The gateway dispatches on the header's type byte and validates the length; these guard the
+// case where a future field makes two message types the same size and a length check becomes
+// ambiguous.
+static_assert(sizeof(SdlTelemetry) != sizeof(SdlSysStatus), "message types must differ in size");
+static_assert(sizeof(SdlTelemetry) != sizeof(SdlAck), "message types must differ in size");
+static_assert(sizeof(SdlSysStatus) != sizeof(SdlAck), "message types must differ in size");
