@@ -79,9 +79,10 @@ function Grid({
   yLabels: { value: number; top: number; text: string }[];
   children: React.ReactNode;
 }) {
+  const hasAxis = yLabels.length > 0;
   return (
     <div className="relative h-full w-full">
-      <div className="absolute inset-y-0 left-0 w-10">
+      <div className={`absolute inset-y-0 left-0 ${hasAxis ? "w-10" : "w-0"}`}>
         {yLabels.map((label) => (
           <span
             key={label.value}
@@ -92,7 +93,9 @@ function Grid({
           </span>
         ))}
       </div>
-      <div className="absolute inset-y-0 left-10 right-0">{children}</div>
+      <div className={`absolute inset-y-0 right-0 ${hasAxis ? "left-10" : "left-0"}`}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -336,11 +339,7 @@ export function CctPanel({ samples, now, range, derived, className = "" }: Panel
     y: toY(sample.targetCct),
   }));
 
-  const yLabels = [max, min].map((value) => ({
-    value,
-    top: toY(value),
-    text: value.toLocaleString("en-US"),
-  }));
+  const yLabels: { value: number; top: number; text: string }[] = [];
 
   return (
     <section className={`card flex min-h-0 flex-col overflow-hidden ${className}`}>
