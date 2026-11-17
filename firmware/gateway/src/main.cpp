@@ -9,6 +9,7 @@
 // The stop button is an interrupt (E2): the ISR only posts an event to ControlTask.
 #include <Arduino.h>
 #include <WiFi.h>
+#include <esp_wifi.h>
 
 #include "app.h"
 #include "cloud.h"
@@ -55,17 +56,29 @@ void setup() {
   // Wi-Fi first: ESP-NOW then runs on the access point's channel.
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);  // keep the radio awake for ESP-NOW
-  WiFi.setHostname(cfg::kDeviceName);  // must be set before begin() to reach the DHCP request
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  for (int i = 0; i < 40 && WiFi.status() != WL_CONNECTED; i++) delay(250);  // up to 10 s
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.printf("[wifi] %s connected to \"%s\", IP %s, channel %d\n", cfg::kDeviceName,
-                  WIFI_SSID, WiFi.localIP().toString().c_str(), WiFi.channel());
+  if (cfg::kLocalLinkTest) {
+    WiFi.setAutoReconnect(false);
+    WiFi.disconnect(false, false);
+    const esp_err_t err = esp_wifi_set_channel(cfg::kLocalLinkChannel, WIFI_SECOND_CHAN_NONE);
+    if (err != ESP_OK) {
+      Serial.printf("[espnow] set channel failed: %s\n", esp_err_to_name(err));
+      delay(1000);
+      ESP.restart();
+    }
+    Serial.printf("[espnow] local test, channel %u, cloud disabled\n", cfg::kLocalLinkChannel);
   } else {
-    // 0 = idle, 1 = SSID not found (5 GHz-only hotspot?), 4 = connect failed, 6 = disconnected
-    // (usual for a rejected password or an AP that never answered).
-    Serial.printf("[wifi] %s NOT connected, status %d — check SSID \"%s\", password, 2.4 GHz\n",
-                  cfg::kDeviceName, static_cast<int>(WiFi.status()), WIFI_SSID);
+    WiFi.setHostname(cfg::kDeviceName);  // must be set before begin() to reach the DHCP request
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    for (int i = 0; i < 40 && WiFi.status() != WL_CONNECTED; i++) delay(250);  // up to 10 s
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.printf("[wifi] %s connected to \"%s\", IP %s, channel %d\n", cfg::kDeviceName,
+                    WIFI_SSID, WiFi.localIP().toString().c_str(), WiFi.channel());
+    } else {
+      // 0 = idle, 1 = SSID not found (5 GHz-only hotspot?), 4 = connect failed, 6 = disconnected
+      // (usual for a rejected password or an AP that never answered).
+      Serial.printf("[wifi] %s NOT connected, status %d — check SSID \"%s\", password, 2.4 GHz\n",
+                    cfg::kDeviceName, static_cast<int>(WiFi.status()), WIFI_SSID);
+    }
   }
   xEventGroupSetBits(app::events, app::kBitWifiTried);  // from here a failure shows as red
   if (!espnow_link::begin()) {
@@ -79,7 +92,9 @@ void setup() {
   xTaskCreatePinnedToCore(control::task, "control", 4096, nullptr, 4, nullptr, 1);
   xTaskCreatePinnedToCore(espnow_link::rxTask, "espnow", 4096, nullptr, 3, nullptr, 1);
   xTaskCreatePinnedToCore(sensors::task, "sensor", 4096, nullptr, 2, nullptr, 1);
-  xTaskCreatePinnedToCore(cloud::task, "cloud", 12288, nullptr, 1, nullptr, 0);  // TLS needs stack
+  if (!cfg::kLocalLinkTest) {
+    xTaskCreatePinnedToCore(cloud::task, "cloud", 12288, nullptr, 1, nullptr, 0);  // TLS needs stack
+  }
   if (cfg::kSimulatedNodes > 0) {
     xTaskCreatePinnedToCore(espnow_link::simulatorTask, "sim", 3072, nullptr, 1, nullptr, 1);
   }

@@ -11,7 +11,7 @@ namespace cfg {
 // when the module has no PSRAM — the N8 has none).
 constexpr int kPinSda = 8;
 constexpr int kPinScl = 9;
-constexpr int kPinPir = 34;          // PIR has its own driver stage; 33-37 free on N8 (no PSRAM)
+constexpr int kPinPir = 14;          // GPIO 33-37 are reserved by octal PSRAM on the N16R8 module
 constexpr int kPinStopButton = 4;    // INPUT_PULLUP, active low
 // Servos must stay inside 1-21/35-45/47-48: ESP32Servo enforces that list and attach()
 // silently fails outside it.
@@ -49,6 +49,9 @@ constexpr float kFeedbackStep = 0.15f;   // "too bright / too dim" changes targe
 
 // ---------------------------------------------------------------- nodes / ESP-NOW
 constexpr int kMaxNodes = 8;
+// Local bench test: no access point or cloud connection. Set false for the full system.
+constexpr bool kLocalLinkTest = false;
+constexpr uint8_t kLocalLinkChannel = 1;
 constexpr int kSimulatedNodes = 0;       // set to 2 for the "1 physical + 2 simulated" test
 constexpr uint8_t kFirstSimulatedId = 101;
 
