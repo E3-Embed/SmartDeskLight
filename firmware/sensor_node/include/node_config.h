@@ -19,10 +19,11 @@ constexpr uint8_t kStatusLedBrightness = 2;  // the on-board pixel is blinding a
 constexpr int kPinSda = 8;
 constexpr int kPinScl = 9;
 
-// TCS34725 bus. Set these to kPinSda/kPinScl to share one bus with the BH1750 (addresses
-// differ, 0x23 vs 0x29). Different pins put it on the S3's second I2C controller (Wire1),
-// which is how the bench board is wired: no splitter needed on GPIO8/9. GPIO10/11 sit next
-// to GPIO9 on the header and are clear of USB, strapping, flash and octal PSRAM pins.
+// TCS34725 bus. Each sensor gets its own pin pair so the wiring stays unambiguous: nothing
+// is doubled up on GPIO8/9. Different pins put it on the S3's second I2C controller (Wire1).
+// To share one bus with the BH1750 instead (addresses differ, 0x23 vs 0x29), set these to
+// kPinSda/kPinScl. GPIO10/11 sit next to GPIO9 on the header and are clear of USB,
+// strapping, flash and octal PSRAM pins.
 constexpr int kPinTcsSda = 10;
 constexpr int kPinTcsScl = 11;
 
