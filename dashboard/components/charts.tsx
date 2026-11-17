@@ -279,17 +279,6 @@ export function LuxPanel({
               />
             ) : null}
           </svg>
-
-          {geometry.last ? (
-            <span
-              className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-1/2"
-              style={{ left: `${geometry.last.x}%`, top: `${geometry.last.y}%` }}
-              aria-hidden="true"
-            >
-              <span className="absolute -inset-2 rounded-full bg-honey/25 blur-[3px]" />
-              <span className="relative block h-[7px] w-[7px] rounded-full bg-amber ring-2 ring-surface" />
-            </span>
-          ) : null}
         </Grid>
         {geometry.visible.length < 2 ? (
           <div className="absolute inset-0 flex items-center justify-center">
@@ -416,6 +405,7 @@ export function CctPanel({ samples, now, range, derived, className = "" }: Panel
                 strokeWidth="2.2"
                 strokeLinecap="round"
                 vectorEffect="non-scaling-stroke"
+                className="cct-seg"
               />
             ))}
           </svg>

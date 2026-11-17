@@ -43,7 +43,7 @@ export function ModePanel({
           <h2 className="text-[13px] font-semibold leading-tight text-ink">โหมดการทำงาน</h2>
           <span className="label">Activity</span>
         </div>
-        <div className="mt-1.5 grid flex-1 grid-cols-3 gap-1.5">
+        <div className="mt-1.5 grid grid-cols-3 gap-1.5">
           {MODES.map((item) => {
             const active = mode === item.id;
             const isPending = pending === item.id;
@@ -55,12 +55,11 @@ export function ModePanel({
                 onClick={() => onMode(item.id)}
                 disabled={isPending}
                 aria-pressed={active}
-                className={`btn flex-col items-start justify-center gap-0.5 px-2 py-1.5 ${active ? "btn-active" : ""}`}
+                className={`btn flex-col items-start justify-center gap-0.5 whitespace-nowrap px-2.5 py-1.5 ${active ? "btn-active" : ""}`}
               >
                 <span className="flex items-center gap-1.5">
                   <Icon size={14} />
-                  <span className="text-[13.5px] font-medium leading-tight">{item.th}</span>
-                  {active ? <IconCheck size={12} className="text-amber-deep" /> : null}
+                  <span className="whitespace-nowrap text-[12px] font-medium leading-tight">{item.th}</span>
                 </span>
                 <span className="num text-[10px] text-muted">
                   {isPending ? "กำลังส่ง…" : `${item.lux} lx · ${item.k.toLocaleString("en-US")} K`}
@@ -130,9 +129,9 @@ export function FeedbackPanel({
   return (
     <section className={`card card-pad ${className}`}>
       <SectionHead title="แสงไม่ถูกใจ?" en="Quick feedback" />
-      <div className="mt-1.5 grid grid-cols-2 gap-1.5">        <button
+      <div className="mt-2 grid grid-cols-2 gap-2">        <button
           type="button"
-          className="btn flex-col gap-0 py-1.5"
+          className="btn flex-col gap-0.5 py-1.5"
           onClick={() => onFeedback("too_bright")}
           disabled={cooldown > 0}
         >
@@ -142,7 +141,7 @@ export function FeedbackPanel({
         </button>
         <button
           type="button"
-          className="btn flex-col gap-0 py-1.5"
+          className="btn flex-col gap-0.5 py-1.5"
           onClick={() => onFeedback("too_dim")}
           disabled={cooldown > 0}
         >

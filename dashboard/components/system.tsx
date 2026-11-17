@@ -118,10 +118,10 @@ export function ScenarioSelect({
 }
 
 export const THEMES = [
-  { id: "studio", th: "Studio Warm", en: "ครีมอุ่น" },
-  { id: "graphite", th: "Warm Graphite", en: "ดำอุ่น" },
-  { id: "nordic", th: "Nordic Daylight", en: "ขาวสะอาด" },
-  { id: "blueprint", th: "Blueprint Slate", en: "น้ำเงิน" },
+  { id: "graphite", th: "Graphite", en: "เทา" },
+  { id: "nordic", th: "Paper", en: "ขาว" },
+  { id: "frost", th: "Frost", en: "ฟ้า" },
+  { id: "blueprint", th: "Blueprint", en: "กริด" },
 ] as const;
 
 function subscribeTheme(callback: () => void) {
@@ -171,6 +171,54 @@ const SEVERITY_LABEL: Record<Severity, string> = {
   ok: "กลับมาปกติ",
   info: "ข้อมูล",
 };
+
+export const STYLES = [
+  { id: "editorial", label: "Print", hint: "แบน" },
+  { id: "glass", label: "Glass", hint: "โปร่ง" },
+  { id: "soft", label: "Soft", hint: "นุ่ม" },
+  { id: "midnight", label: "Noir", hint: "ดำ" },
+] as const;
+
+function subscribeStyle(callback: () => void) {
+  window.addEventListener("sdl-style", callback);
+  return () => window.removeEventListener("sdl-style", callback);
+}
+
+function styleSnapshot(): string {
+  const value = document.documentElement.dataset.style ?? "base";
+  return STYLES.some((item) => item.id === value) ? value : "base";
+}
+
+export function StylePicker() {
+  const style = useSyncExternalStore(subscribeStyle, styleSnapshot, () => "base");
+
+  const change = (next: string) => {
+    document.documentElement.dataset.style = next;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("style", next);
+      window.history.replaceState(null, "", url);
+      localStorage.setItem("sdl-style", next);
+    } catch {
+      // private mode
+    }
+    window.dispatchEvent(new Event("sdl-style"));
+  };
+
+  return (
+    <Select
+      value={style}
+      onChange={change}
+      ariaLabel="เลือกสไตล์หน้าจอ"
+      icon={<IconSpark size={13} />}
+      options={STYLES.map((item) => ({
+        value: item.id,
+        label: item.label,
+        hint: item.hint,
+      }))}
+    />
+  );
+}
 
 export function AlertBanner({
   alert,
@@ -294,10 +342,12 @@ export function AlertsPanel({
                   ))}
                 </li>
               ) : null}
-              <li className="short-hide flex flex-col gap-1">
-                <span>· เซนเซอร์หลุด / ปิดฉุกเฉิน → แจ้งทันที</span>
-                <span>· คลาวด์หลุด / กลับมา → บันทึกที่นี่</span>
-              </li>
+              {compact ? null : (
+                <li className="short-hide flex flex-col gap-1">
+                  <span>· เซนเซอร์หลุด / ปิดฉุกเฉิน → แจ้งทันที</span>
+                  <span>· คลาวด์หลุด / กลับมา → บันทึกที่นี่</span>
+                </li>
+              )}
             </ul>
           </div>
         ) : (

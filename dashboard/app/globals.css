@@ -287,13 +287,10 @@ body {
     appearance: none;
     -webkit-appearance: none;
     height: 30px;
-    padding: 0 24px 0 9px;
+    padding: 0 9px;
     border-radius: 8px;
     border: 1px solid var(--line);
     background-color: var(--surface);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239a9187' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 8px center;
     font-size: 12.5px;
     color: var(--ink);
     cursor: pointer;
@@ -393,7 +390,7 @@ body {
     );
     filter: blur(6px);
     pointer-events: none;
-    transition: opacity 900ms ease;
+    transition: opacity 150ms ease;
   }
 }
 
@@ -425,7 +422,7 @@ body {
 }
 
 .fade-up {
-  animation: sdl-fade-up 220ms ease both;
+  animation: sdl-fade-up 140ms ease both;
 }
 
 .light-wash {
@@ -439,7 +436,7 @@ body {
   );
   filter: blur(22px);
   pointer-events: none;
-  transition: opacity 900ms ease;
+  transition: opacity 150ms ease;
 }
 
 .lamp-top-line {
@@ -480,7 +477,7 @@ body {
   );
   filter: blur(20px);
   pointer-events: none;
-  transition: opacity 900ms ease;
+  transition: opacity 150ms ease;
 }
 
 html[data-corners="sharp"] .card,
@@ -611,9 +608,8 @@ html[data-logo="noodle"] .logo-noodle {
 }
 
 .noodle-squiggle path {
-  stroke-dasharray: 220;
-  stroke-dashoffset: 220;
-  animation: noodle-draw 1.15s cubic-bezier(0.2, 0.8, 0.2, 1) 0.15s forwards;
+  stroke-dasharray: none;
+  stroke-dashoffset: 0;
 }
 
 @keyframes noodle-draw {
@@ -622,9 +618,305 @@ html[data-logo="noodle"] .logo-noodle {
   }
 }
 
+.hero-variant {
+  display: none;
+}
+
+.hero-base {
+  display: block;
+}
+
+html[data-style="editorial"] .hero-base,
+html[data-style="midnight"] .hero-base {
+  display: none;
+}
+
+html[data-style="lab"] .hero-lab {
+  display: flex;
+}
+
+html[data-style="editorial"] .hero-editorial,
+html[data-style="midnight"] .hero-editorial {
+  display: block;
+}
+
+html[data-style="lab"] .error-bar,
+html[data-style="editorial"] .error-bar {
+  display: block;
+}
+
+.editorial-value {
+  font-family: var(--font-editorial-face), Georgia, "Times New Roman", serif;
+  font-weight: 400;
+  font-size: clamp(66px, 10.5vh, 118px);
+  line-height: 0.82;
+  letter-spacing: -0.055em;
+  font-variant-numeric: tabular-nums;
+}
+
+html[data-style="lab"] .card {
+  border-radius: 2px;
+  box-shadow: none;
+}
+
+html[data-style="lab"] .chip,
+html[data-style="lab"] .btn,
+html[data-style="lab"] .select,
+html[data-style="lab"] .tab,
+html[data-style="lab"] .icon-btn {
+  border-radius: 2px;
+}
+
+html[data-style="lab"] .label {
+  letter-spacing: 0.13em;
+}
+
+html[data-style="lab"] [class*="rounded-[9px]"],
+html[data-style="editorial"] [class*="rounded-[9px]"] {
+  border-radius: 1px !important;
+}
+
+html[data-style="lab"] .light-wash {
+  opacity: 0.1 !important;
+}
+
+html[data-style="lab"] .glow {
+  opacity: 0.14 !important;
+}
+
+html[data-style="editorial"] .card {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+html[data-style="editorial"] .card-pad {
+  padding: 14px 16px;
+}
+
+html[data-style="editorial"] .chip {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+html[data-style="editorial"] .btn {
+  background: transparent;
+  border-radius: 0;
+}
+
+html[data-style="editorial"] .btn-active {
+  background: transparent;
+  border-color: var(--line);
+  box-shadow: inset 0 -2px 0 var(--amber);
+  color: var(--ink);
+}
+
+html[data-style="editorial"] .select,
+html[data-style="editorial"] .tab,
+html[data-style="editorial"] .icon-btn {
+  background: transparent;
+  border-radius: 0;
+}
+
+html[data-style="editorial"] .light-wash,
+html[data-style="editorial"] .glow,
+html[data-style="editorial"] .hero-glow,
+html[data-style="editorial"] .lamp-top-line {
+  display: none;
+}
+
+html[data-style="editorial"] .label {
+  letter-spacing: 0.2em;
+}
+
+html[data-style="nocturne"] .card {
+  background: color-mix(in oklab, var(--surface) 68%, transparent);
+  backdrop-filter: blur(18px) saturate(115%);
+  border-color: color-mix(in oklab, var(--line) 72%, transparent);
+  box-shadow: 0 26px 60px -42px rgb(0 0 0 / 0.75);
+}
+
+html[data-style="nocturne"] .btn,
+html[data-style="nocturne"] .select,
+html[data-style="nocturne"] .icon-btn {
+  background: color-mix(in oklab, var(--surface) 62%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+html[data-style="nocturne"] .light-wash {
+  opacity: 0.38 !important;
+}
+
+html[data-style="nocturne"] .glow {
+  opacity: 0.55 !important;
+}
+
+/* Clear Glass */
+html[data-style="glass"] body {
+  background:
+    radial-gradient(
+      720px 520px at 2% -8%,
+      color-mix(in oklab, var(--amber) 38%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      620px 480px at 98% 2%,
+      color-mix(in oklab, var(--sage) 26%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      520px 420px at 70% 100%,
+      color-mix(in oklab, var(--honey) 30%, transparent),
+      transparent 72%
+    ),
+    var(--bg);
+}
+
+html[data-style="glass"] .card {
+  background: color-mix(in oklab, var(--surface) 42%, transparent);
+  backdrop-filter: blur(26px) saturate(150%);
+  border-color: color-mix(in oklab, #fff 55%, transparent);
+  box-shadow:
+    0 30px 70px -48px rgb(0 0 0 / 0.5),
+    inset 0 1px 0 color-mix(in oklab, #fff 75%, transparent);
+}
+
+html[data-style="glass"] .btn,
+html[data-style="glass"] .select,
+html[data-style="glass"] .icon-btn {
+  background: color-mix(in oklab, var(--surface) 55%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+html[data-style="glass"] .light-wash {
+  opacity: 0.32 !important;
+}
+
+/* Terminal */
+html[data-style="terminal"] {
+  --bg: #07120c;
+  --surface: #0a1a10;
+  --surface-2: #10281a;
+  --line: #1f4a2e;
+  --ink: #d8ffe4;
+  --muted: #78a88a;
+  --amber: #8ef0a8;
+  --amber-deep: #b8ffca;
+  --honey: #5fbf7f;
+  --sage: #8ef0a8;
+  --brick: #ff8f7a;
+  --blue: #8fb8ff;
+  --plum: #c6a3ff;
+  color-scheme: dark;
+}
+
+html[data-style="terminal"] body {
+  background: var(--bg);
+}
+
+html[data-style="terminal"] .card {
+  border-radius: 0;
+  background: var(--surface);
+  border-color: var(--line);
+  box-shadow: none;
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent 0 3px,
+    color-mix(in oklab, #ffffff 2%, transparent) 3px 4px
+  );
+}
+
+html[data-style="terminal"] .chip,
+html[data-style="terminal"] .btn,
+html[data-style="terminal"] .select,
+html[data-style="terminal"] .tab,
+html[data-style="terminal"] .icon-btn {
+  border-radius: 0;
+}
+
+html[data-style="terminal"] .glow,
+html[data-style="terminal"] .light-wash,
+html[data-style="terminal"] .hero-glow,
+html[data-style="terminal"] .lamp-top-line {
+  display: none;
+}
+
+html[data-style="terminal"] .label {
+  font-family: var(--font-mono);
+  letter-spacing: 0.16em;
+}
+
+/* Swiss */
+html[data-style="swiss"] {
+  --bg: #f2efe7;
+  --surface: #fbfaf4;
+  --surface-2: #e8e3d7;
+  --line: #111111;
+  --ink: #111111;
+  --muted: #5a5750;
+  --amber: #d23b2a;
+  --amber-deep: #a92a1d;
+  --honey: #d23b2a;
+  --sage: #2f6b4f;
+  --brick: #d23b2a;
+  --blue: #2f4a8a;
+  --plum: #6b4b7a;
+  color-scheme: light;
+}
+
+html[data-style="swiss"] .card {
+  border-radius: 0;
+  border-color: #111111;
+  border-top-width: 3px;
+  box-shadow: none;
+}
+
+html[data-style="swiss"] .chip,
+html[data-style="swiss"] .btn,
+html[data-style="swiss"] .select,
+html[data-style="swiss"] .tab,
+html[data-style="swiss"] .icon-btn {
+  border-radius: 0;
+}
+
+html[data-style="swiss"] .glow,
+html[data-style="swiss"] .light-wash,
+html[data-style="swiss"] .hero-glow,
+html[data-style="swiss"] .lamp-top-line {
+  display: none;
+}
+
+html[data-style="swiss"] .label {
+  letter-spacing: 0.08em;
+  color: #111111;
+  font-weight: 600;
+}
+
 @media (max-height: 780px) {
   .short-hide {
     display: none !important;
+  }
+
+  html[data-style="lab"] .hero-lab {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  html[data-style="lab"] .lab-gauge {
+    transform: scale(0.66);
+    transform-origin: center;
+    margin: -28px;
+  }
+
+  html[data-style="lab"] .lab-target {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
   }
 }
 
@@ -636,4 +928,261 @@ html[data-logo="noodle"] .logo-noodle {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+}
+
+/* ===== v2 themes ===== */
+html[data-theme="nordic"] {
+  --bg: #fafaf8;
+  --surface: #ffffff;
+  --surface-2: #f1f1ef;
+  --line: #e2e2df;
+  --ink: #0b0b0b;
+  --muted: #6f6f6f;
+  --amber: #111111;
+  --amber-deep: #000000;
+  --honey: #a3a3a3;
+  --sage: #3f3f3f;
+  --brick: #1f1f1f;
+  --blue: #4a4a4a;
+  --plum: #6a6a6a;
+  color-scheme: light;
+}
+
+html[data-theme="frost"] {
+  --bg: #f1f5fa;
+  --surface: #ffffff;
+  --surface-2: #e8eff7;
+  --line: #d6e0ec;
+  --ink: #15202c;
+  --muted: #5e6b7a;
+  --amber: #2f6feb;
+  --amber-deep: #1e56c4;
+  --honey: #7fa8f0;
+  --sage: #2e8b6f;
+  --brick: #ce4b3f;
+  --blue: #2f6feb;
+  --plum: #6a5a9a;
+  color-scheme: light;
+}
+
+html[data-theme="graphite"] {
+  --bg: #0f1012;
+  --surface: #17191c;
+  --surface-2: #1f2225;
+  --line: #30343a;
+  --ink: #ffffff;
+  --muted: #a8afb8;
+  --amber: #e8a45c;
+  --amber-deep: #ffc584;
+  --honey: #e8a45c;
+  --sage: #7fd1a6;
+  --brick: #ff7a66;
+  --blue: #86b4f0;
+  --plum: #c3a6e6;
+  color-scheme: dark;
+}
+
+/* ===== v2 styles ===== */
+html[data-theme="nordic"] .cct-seg {
+  filter: grayscale(1);
+  opacity: 0.85;
+}
+
+html[data-style="soft"] .card {
+  border-radius: 20px;
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, #fff 60%, transparent),
+    0 20px 44px -36px color-mix(in oklab, var(--ink) 55%, transparent);
+}
+
+html[data-style="soft"] .btn,
+html[data-style="soft"] .select,
+html[data-style="soft"] .icon-btn {
+  border-radius: 14px;
+}
+
+html[data-style="soft"] .chip {
+  border-radius: 10px;
+}
+
+html[data-style="midnight"] .card {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+html[data-style="midnight"] .glow,
+html[data-style="midnight"] .light-wash,
+html[data-style="midnight"] .hero-glow,
+html[data-style="midnight"] .lamp-top-line {
+  display: none;
+}
+
+html[data-style="midnight"] .label {
+  letter-spacing: 0.2em;
+}
+
+html[data-style="glass"] body {
+  background:
+    radial-gradient(
+      640px 520px at 10% 6%,
+      color-mix(in oklab, var(--amber) 34%, transparent),
+      transparent 66%
+    ),
+    radial-gradient(
+      560px 480px at 92% 10%,
+      color-mix(in oklab, var(--blue) 28%, transparent),
+      transparent 68%
+    ),
+    radial-gradient(
+      720px 560px at 72% 98%,
+      color-mix(in oklab, var(--honey) 24%, transparent),
+      transparent 70%
+    ),
+    var(--bg);
+}
+
+html[data-style="glass"] .card {
+  background: color-mix(in oklab, var(--surface) 66%, transparent);
+  backdrop-filter: blur(26px) saturate(150%);
+  border: 1px solid color-mix(in oklab, var(--ink) 14%, transparent);
+  border-radius: 22px;
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, #fff 45%, transparent),
+    0 34px 70px -46px color-mix(in oklab, var(--ink) 70%, transparent);
+}
+
+html[data-style="glass"] .btn,
+html[data-style="glass"] .select,
+html[data-style="glass"] .icon-btn {
+  background: color-mix(in oklab, var(--surface) 55%, transparent);
+  border-color: color-mix(in oklab, var(--ink) 12%, transparent);
+  border-radius: 15px;
+  backdrop-filter: blur(14px);
+}
+
+html[data-style="glass"] .chip {
+  background: color-mix(in oklab, var(--surface) 55%, transparent);
+  border-color: color-mix(in oklab, var(--ink) 14%, transparent);
+  color: var(--ink);
+}
+
+html[data-style="glass"] .icon-btn {
+  width: 38px;
+  height: 38px;
+}
+
+html[data-style="glass"] .glow {
+  opacity: 0.5 !important;
+}
+
+html[data-style="glass"] .light-wash {
+  opacity: 0.3 !important;
+}
+
+/* ===== Error bar (all styles) ===== */
+.error-empty {
+  height: 26px;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--surface-2) 55%, transparent);
+}
+
+.error-scale {
+  position: relative;
+  height: 16px;
+}
+
+.error-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 6px;
+  height: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+.error-band {
+  position: absolute;
+  top: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--amber) 24%, var(--surface));
+  border: 1px solid color-mix(in oklab, var(--amber) 55%, transparent);
+}
+
+.error-target {
+  position: absolute;
+  left: 50%;
+  top: 3px;
+  height: 12px;
+  width: 1.5px;
+  background: color-mix(in oklab, var(--ink) 28%, transparent);
+}
+
+.error-mark {
+  position: absolute;
+  top: 1px;
+  height: 14px;
+  width: 3px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: var(--amber);
+  transition: left 700ms ease;
+}
+
+.error-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+html[data-theme="nordic"] .error-band {
+  background: repeating-linear-gradient(
+    45deg,
+    color-mix(in oklab, var(--ink) 26%, transparent) 0 1px,
+    transparent 1px 4px
+  );
+  border-color: color-mix(in oklab, var(--ink) 38%, transparent);
+}
+
+html[data-style="editorial"] .error-scale,
+html[data-style="midnight"] .error-scale {
+  height: 12px;
+}
+
+html[data-style="editorial"] .error-track,
+html[data-style="midnight"] .error-track,
+html[data-style="editorial"] .error-band,
+html[data-style="midnight"] .error-band {
+  top: 4px;
+  height: 3px;
+}
+
+html[data-style="editorial"] .error-target,
+html[data-style="midnight"] .error-target {
+  top: 2px;
+  height: 7px;
+}
+
+html[data-style="editorial"] .error-mark,
+html[data-style="midnight"] .error-mark {
+  top: 0;
+  height: 11px;
+  width: 2px;
+}
+
+html[data-style="glass"] .error-band {
+  background: color-mix(in oklab, var(--amber) 32%, transparent);
+  border-color: color-mix(in oklab, var(--amber) 60%, transparent);
+}
+
+html[data-corners="sharp"] .error-track,
+html[data-corners="sharp"] .error-band,
+html[data-corners="sharp"] .error-mark {
+  border-radius: 1px !important;
 }

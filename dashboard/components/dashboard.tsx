@@ -13,7 +13,7 @@ import { rangeById } from "@/lib/history";
 import type { Mode, MockScenario, PublicState, Sample } from "@/lib/types";
 import { CctPanel, LuxPanel } from "./charts";
 import { FeedbackPanel, ModePanel, SafeNote } from "./controls";
-import { LampCard } from "./lamp-card";
+import { LampCard, LampStrip } from "./lamp-card";
 import {
   AlertBanner,
   AlertsPanel,
@@ -22,6 +22,7 @@ import {
   RawSheet,
   ScenarioSelect,
   severity,
+  StylePicker,
   ThemePicker,
 } from "./system";
 import { CornersToggle, IconAlert, IconCheck, IconGrid, Select } from "./ui";
@@ -47,7 +48,7 @@ const PENDING_TIMEOUT_MS = 15_000;
 const FEEDBACK_COOLDOWN_MS = 5_000;
 const BANNER_MS = 20_000;
 
-type LayoutId = "a" | "b" | "c";
+type LayoutId = "a" | "b";
 
 const LAYOUTS: { id: LayoutId; label: string; hint: string }[] = [
   { id: "a", label: "Operator", hint: "3 คอลัมน์" },
@@ -374,6 +375,7 @@ export function Dashboard() {
           />
           <LayoutPicker layout={layout} onChange={changeLayout} />
           <ThemePicker />
+          <StylePicker />
           <CornersToggle />
           <span className="num hidden text-[11.5px] text-muted xl:inline">
             {new Date(now).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
@@ -386,7 +388,7 @@ export function Dashboard() {
         <AlertBanner alert={latestAlert} onClose={() => setDismissedAlert(latestAlert.id)} />
       ) : null}
 
-      <main className="flex min-h-0 flex-1 flex-col gap-2 px-3 pb-2 pt-0.5">
+      <main className="mx-auto flex min-h-0 w-full max-w-[1680px] flex-1 flex-col gap-2 px-3 pb-2 pt-0.5">
         {layout === "a" ? (
           <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 xl:grid-cols-[minmax(300px,330px)_minmax(0,1fr)_minmax(300px,330px)]">
             {lamp}

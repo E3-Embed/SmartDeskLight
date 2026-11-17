@@ -28,6 +28,76 @@ const FILTERS = [
 ] as const;
 
 
+function polar(cx: number, cy: number, radius: number, deg: number) {
+  const angle = ((deg - 90) * Math.PI) / 180;
+  return [cx + radius * Math.cos(angle), cy + radius * Math.sin(angle)] as const;
+}
+
+function LabGauge({ lux, target }: { lux: number | null; target: number }) {
+  const size = 172;
+  const c = size / 2;
+  const r = 62;
+  const circumference = 2 * Math.PI * r;
+  const value = Math.max(0, Math.min(lux ?? 0, 800));
+  const fraction = value / 800;
+  const targetDeg = (Math.max(0, Math.min(target, 800)) / 800) * 360;
+  const [tx1, ty1] = polar(c, c, r - 11, targetDeg);
+  const [tx2, ty2] = polar(c, c, r + 9, targetDeg);
+
+  return (
+    <div className="relative lab-gauge" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+        <circle cx={c} cy={c} r={r} fill="none" stroke="var(--line)" strokeWidth="1" />
+        <circle
+          cx={c}
+          cy={c}
+          r={r}
+          fill="none"
+          stroke="var(--amber)"
+          strokeWidth="4"
+          strokeLinecap="butt"
+          strokeDasharray={`${circumference * fraction} ${circumference}`}
+          transform={`rotate(-90 ${c} ${c})`}
+          opacity="0.9"
+        />
+        {Array.from({ length: 41 }, (_, i) => {
+          const deg = (i / 40) * 360;
+          const major = i % 5 === 0;
+          const [x1, y1] = polar(c, c, r + (major ? 7 : 4), deg);
+          const [x2, y2] = polar(c, c, r + 11, deg);
+          return (
+            <line
+              key={i}
+              x1={x1}
+              y1={y1}
+              x2={x2}
+              y2={y2}
+              stroke="var(--muted)"
+              strokeWidth={major ? 1.2 : 0.7}
+              opacity={major ? 0.7 : 0.4}
+            />
+          );
+        })}
+        <line
+          x1={tx1}
+          y1={ty1}
+          x2={tx2}
+          y2={ty2}
+          stroke="var(--brick)"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="num text-[36px] font-semibold leading-none">
+          {lux == null ? "—" : formatLux(lux)}
+        </span>
+        <span className="mt-1 text-[10px] uppercase tracking-[0.14em] text-muted">lux</span>
+      </div>
+    </div>
+  );
+}
+
 function MiniTrend({ samples }: { samples: Sample[] }) {
   const recent = samples.slice(-90);
   if (recent.length < 2) {
@@ -83,29 +153,101 @@ function MiniTrend({ samples }: { samples: Sample[] }) {
 
 function ErrorBar({ errorPct }: { errorPct: number | null }) {
   if (errorPct == null) {
-    return <div className="h-[26px] rounded-[6px] bg-surface-2/50" />;
+    return <div className="error-empty" />;
   }
   const position = clamp(50 + (errorPct / 30) * 50, 0, 100);
   return (
-    <div>
-      <div className="relative h-4">
-        <div className="absolute inset-x-0 top-[6px] h-1.5 rounded-full border border-line bg-surface-2" />
-        <div
-          className="absolute top-[6px] h-1.5 rounded-[3px] bg-amber-soft"
-          style={{ left: "38.33%", width: "23.34%" }}
-        />
-        <div className="absolute top-[3px] h-3 w-[1.5px] bg-ink/25" style={{ left: "50%" }} />
-        <div
-          className="absolute top-[1px] h-4 w-[3px] -translate-x-1/2 rounded-full bg-amber transition-[left] duration-700"
-          style={{ left: `${position}%` }}
-        />
+    <div className="error-bar">
+      <div className="error-scale">
+        <span className="error-track" />
+        <span className="error-band" style={{ left: "38.33%", width: "23.34%" }} />
+        <span className="error-target" />
+        <span className="error-mark" style={{ left: `${position}%` }} />
       </div>
-      <div className="flex justify-between text-[10px] text-muted">
+      <div className="error-labels">
         <span className="num">−30%</span>
         <span>เป้า · ±7%</span>
         <span className="num">+30%</span>
       </div>
     </div>
+  );
+}
+
+export function LampStrip({
+  derived,
+  now,
+}: {
+  derived: Derived;
+  now: number;
+}) {
+  return (
+    <section className="card flex min-h-0 min-w-0 flex-1 items-stretch gap-4 px-4 py-2.5">
+      <div className="flex min-w-0 flex-col justify-center">
+        <div className="flex items-center gap-2">
+          <span className="label">ความสว่างบนโต๊ะ</span>
+          <StateChip state={derived.state} />
+        </div>
+        <div className="mt-1 flex items-end gap-2">
+          <span className="font-display text-[clamp(40px,6.4vh,62px)] font-semibold leading-[0.9]">
+            {formatLux(derived.lux)}
+          </span>
+          <span className="mb-1 text-[12px] text-muted">lx</span>
+          <span
+            className={`num mb-1 text-[12px] ${derived.inTolerance ? "text-sage" : "text-amber-deep"}`}
+          >
+            {formatPercent(derived.errorPct)}
+          </span>
+        </div>
+        <p className="mt-1 text-[11.5px] text-muted">
+          เป้า <span className="num text-ink">{formatLux(derived.targetLux)}</span> lx ·{" "}
+          {formatAgo(derived.lastSeenAt, now)}
+        </p>
+      </div>
+
+      <div className="grid min-w-0 flex-1 grid-cols-2 content-center gap-x-4 gap-y-2 border-line pl-4 xl:border-l">
+        <div>
+          <div className="flex items-baseline justify-between">
+            <span className="label">PWM</span>
+            <span className="num text-[11.5px]">{Math.round(derived.pwm)}/255</span>
+          </div>
+          <div className="mt-1 bar">
+            <span style={{ width: `${derived.pwmPct}%` }} />
+          </div>
+        </div>
+        <div>
+          <div className="flex items-baseline justify-between">
+            <span className="label">กำลังไฟ</span>
+            <span className="num text-[11.5px]">{formatWatts(derived.powerMw)} W</span>
+          </div>
+          <div className="mt-1 bar">
+            <span
+              style={{ width: `${clamp(((derived.powerMw ?? 0) / 5000) * 100, 0, 100)}%` }}
+            />
+          </div>
+        </div>
+        <div className="col-span-2 flex items-center gap-1.5">
+          {FILTERS.map((filter, index) => {
+            const active = derived.filters[index];
+            return (
+              <span
+                key={filter.key}
+                className={`inline-flex items-center gap-1.5 rounded-[6px] border px-2 py-0.5 text-[10.5px] ${
+                  active ? "border-amber/50 bg-amber-soft text-amber-deep" : "border-line text-muted"
+                }`}
+              >
+                <Dot tone={active ? "warn" : "idle"} />
+                {filter.en}
+              </span>
+            );
+          })}
+          <span className="ml-auto flex items-center gap-1.5 text-[10.5px]">
+            <Dot tone={derived.presence ? "ok" : "idle"} pulse={derived.presence} />
+            <span className="text-ink">{derived.presence ? "มีคน" : "ไม่มีคน"}</span>
+            <span className="text-muted">{derived.distanceMm ? `${derived.distanceMm} mm` : "—"}</span>
+          </span>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -168,22 +310,54 @@ export function LampCard({
                 derived.state === "offline" ? 0.1 : 0.28 + (derived.pwm / 255) * 0.45,
             }}
           />
-          <div className="relative flex items-end gap-2">
-              {derived.lux == null ? (
-                <span className="font-display text-[46px] leading-[1.1] text-muted">—</span>
-              ) : (
-                <span
-                  className={`font-display text-[clamp(54px,8vh,84px)] font-semibold leading-[0.9] tracking-[-0.03em] ${
-                    derived.state === "offline" || derived.state === "stale" ? "opacity-60" : ""
-                  }`}
-                  style={{ fontVariantNumeric: "tabular-nums" }}
-                >
-                  {formatLux(derived.lux)}
-                </span>
-              )}
+          <div className="hero-variant hero-base relative flex items-end gap-2">
+            {derived.lux == null ? (
+              <span className="font-display text-[46px] leading-[1.1] text-muted">—</span>
+            ) : (
+              <span
+                className={`font-display text-[clamp(54px,8vh,84px)] font-semibold leading-[0.9] tracking-[-0.03em] ${
+                  derived.state === "offline" || derived.state === "stale" ? "opacity-60" : ""
+                }`}
+                style={{ fontVariantNumeric: "tabular-nums" }}
+              >
+                {formatLux(derived.lux)}
+              </span>
+            )}
             <span className="mb-1 text-[14px] text-muted">lx</span>
           </div>
-          <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[12px]">
+
+          <div className="hero-variant hero-editorial">
+            <div className="flex items-end gap-2">
+              <span className="editorial-value">{formatLux(derived.lux)}</span>
+              <span className="mb-2 text-[13px] text-muted">lx</span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-line/70 pt-2 text-[12px]">
+              <span className="text-muted">
+                เป้า <span className="num text-ink">{formatLux(derived.targetLux)}</span> lx
+              </span>
+              <span
+                className={`num ${derived.inTolerance ? "text-sage" : "text-amber-deep"}`}
+              >
+                {formatPercent(derived.errorPct)}
+              </span>
+            </div>
+          </div>
+
+          <div className="hero-variant hero-lab flex flex-col items-center gap-2">
+            <LabGauge lux={derived.lux} target={derived.targetLux} />
+            <div className="lab-target flex flex-wrap items-baseline justify-center gap-x-3 text-[12px]">
+              <span className="text-muted">
+                เป้า <span className="num text-ink">{formatLux(derived.targetLux)}</span> lx
+              </span>
+              <span
+                className={`num ${derived.inTolerance ? "text-sage" : "text-amber-deep"}`}
+              >
+                {formatPercent(derived.errorPct)}
+              </span>
+            </div>
+          </div>
+
+          <div className="hero-variant hero-base mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[12px]">
             <span className="text-muted">
               เป้า <span className="num text-ink">{formatLux(derived.targetLux)}</span> lx
             </span>
@@ -196,7 +370,9 @@ export function LampCard({
           </div>
         </div>
 
-        <ErrorBar errorPct={derived.errorPct} />
+        <div className="error-bar">
+          <ErrorBar errorPct={derived.errorPct} />
+        </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
