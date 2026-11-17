@@ -19,6 +19,13 @@ constexpr uint8_t kStatusLedBrightness = 2;  // the on-board pixel is blinding a
 constexpr int kPinSda = 8;
 constexpr int kPinScl = 9;
 
+// TCS34725 bus. Set these to kPinSda/kPinScl to share one bus with the BH1750 (addresses
+// differ, 0x23 vs 0x29). Different pins put it on the S3's second I2C controller (Wire1),
+// which is how the bench board is wired: no splitter needed on GPIO8/9. GPIO10/11 sit next
+// to GPIO9 on the header and are clear of USB, strapping, flash and octal PSRAM pins.
+constexpr int kPinTcsSda = 10;
+constexpr int kPinTcsScl = 11;
+
 // Health heartbeat period. Readings go out at kSensorPeriodMs; the heartbeat stays slower
 // because it only exists to prove the link and report health.
 constexpr uint32_t kHeartbeatMs = 2000;
