@@ -16,6 +16,29 @@
 #include "ring_buffer.h"
 #include "secrets.h"
 
+// ---- credentials. EMQX takes MQTT_USERNAME / MQTT_PASSWORD. The older layout kept the EMQX
+// login in NETPIE_TOKEN / NETPIE_SECRET; that is still accepted while no NETPIE device is set,
+// because once NETPIE_CLIENT_ID exists those two names belong to the NETPIE device.
+#if defined(MQTT_USERNAME) && defined(MQTT_PASSWORD)
+#define SDL_MQTT_USER MQTT_USERNAME
+#define SDL_MQTT_PASS MQTT_PASSWORD
+#elif !defined(NETPIE_CLIENT_ID)
+#define SDL_MQTT_USER NETPIE_TOKEN
+#define SDL_MQTT_PASS NETPIE_SECRET
+#else
+#error "secrets.h: add MQTT_USERNAME / MQTT_PASSWORD for EMQX (NETPIE_* now means the NETPIE device)"
+#endif
+
+#if defined(NETPIE_CLIENT_ID) && defined(NETPIE_TOKEN) && defined(NETPIE_SECRET)
+#define SDL_NETPIE_CLIENT_ID NETPIE_CLIENT_ID
+#define SDL_NETPIE_TOKEN NETPIE_TOKEN
+#define SDL_NETPIE_SECRET NETPIE_SECRET
+#else
+#define SDL_NETPIE_CLIENT_ID ""
+#define SDL_NETPIE_TOKEN ""
+#define SDL_NETPIE_SECRET ""
+#endif
+
 namespace cloud {
 namespace {
 
@@ -39,8 +62,21 @@ bool presenceDue = true;     // republish node presence (retained) on every conn
 uint32_t wifiRetries = 0;    // WiFi.reconnect() calls
 uint32_t mqttFails = 0;      // TLS or MQTT connect attempts that failed
 
+// NETPIE2020 mirror (see config.h): a second, independent session. Its failures never touch
+// the EMQX link, the backlog or the online/offline state.
+WiFiClientSecure netpieTls;
+PubSubClient netpie(netpieTls);
+uint32_t lastNetpieTryMs = 0;
+uint32_t netpieBackoffMs = cfg::kNetpieRetryMinMs;
+uint32_t lastNetpieShadowMs = 0;
+bool netpieShadowDue = true;  // write the shadow as soon as the session comes up
+uint32_t netpieFails = 0;
+
 // ---------------------------------------------------------------- dashboard commands
-// Payloads on @msg/sdl/cmd:  {"mode":"coding"}  or  {"feedback":"too_bright"|"too_dim"}
+// Payloads on @msg/sdl/cmd (from EMQX or NETPIE, same handler):
+//   {"mode":"reading"|"coding"|"drawing"}   {"feedback":"too_bright"|"too_dim"}
+//   {"ai":"refresh"}  ask the AI for a new profile now instead of at the next 5 min tick
+//   {"safe":1}        enter the safe state; leaving it needs the physical stop button
 void onMqttMessage(char *topic, byte *payload, unsigned int length) {
   JsonDocument doc;
   if (deserializeJson(doc, reinterpret_cast<const char *>(payload), length)) return;
@@ -56,6 +92,14 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
     ev.type = app::EventType::Feedback;
     ev.feedback = !strcmp(fb, "too_bright") ? 1 : (!strcmp(fb, "too_dim") ? -1 : 0);
     if (ev.feedback != 0) xQueueSend(app::qControl, &ev, 0);
+  }
+  const char *ai = doc["ai"];
+  if (ai && !strcmp(ai, "refresh")) app::requestAiProfile();
+
+  JsonVariant safe = doc["safe"];
+  if ((safe.is<bool>() && safe.as<bool>()) || (safe.is<int>() && safe.as<int>() == 1)) {
+    ev.type = app::EventType::EnterSafe;
+    xQueueSend(app::qControl, &ev, 0);
   }
 }
 
@@ -114,12 +158,13 @@ bool ensureMqtt() {
     }
   }
 
-  // EMQX: client id = cfg::kDeviceName, username/password come from secrets.h (the macros
-  // keep their NETPIE names). Two sessions with the same client id kick each other off.
+  // EMQX: client id = cfg::kDeviceName, username/password from secrets.h (MQTT_USERNAME /
+  // MQTT_PASSWORD, see the credential block at the top). Two sessions with the same client
+  // id kick each other off.
   // The Last Will is retained: when the gateway disappears without a clean DISCONNECT
   // (power cut, crash, radio gone past the 30 s keepalive), EMQX publishes "offline"
   // for us and every subscriber sees it.
-  if (!mqtt.connect(cfg::kDeviceName, NETPIE_TOKEN, NETPIE_SECRET, cfg::kTopicStatus, 1, true,
+  if (!mqtt.connect(cfg::kDeviceName, SDL_MQTT_USER, SDL_MQTT_PASS, cfg::kTopicStatus, 1, true,
                     "offline")) {
     mqttFails++;
     Serial.printf("[cloud] MQTTS connect failed, state %d\n", mqtt.state());
@@ -163,9 +208,8 @@ bool publishReading(const app::TelemetryRecord &rec) {
 // Full snapshot for dashboards, every kStatePeriodMs: what the lamp is doing plus the last
 // value seen from every node. Flat JSON — this used to be a NETPIE shadow document, but on a
 // self-hosted broker there is no shadow store to wrap it in.
-void publishState() {
-  JsonDocument doc;
-  JsonObject d = doc.to<JsonObject>();
+// Fills `d` with the snapshot; shared by the EMQX topic and the NETPIE shadow.
+void fillState(JsonObject d) {
   d["device"] = cfg::kDeviceName;
   {
     app::StateLock lock;
@@ -207,10 +251,59 @@ void publishState() {
   d["dropped"] = backlog.dropped();
   d["heap"] = ESP.getFreeHeap();
   d["uptime_s"] = millis() / 1000;
+}
 
+void publishState() {
+  JsonDocument doc;
+  fillState(doc.to<JsonObject>());
   char payload[2048];  // kMaxNodes entries with health keys; must stay <= mqtt buffer size
   size_t n = serializeJson(doc, payload, sizeof(payload));
   mqtt.publish(cfg::kTopicState, reinterpret_cast<const uint8_t *>(payload), n);
+}
+
+// ---------------------------------------------------------------- NETPIE2020 mirror
+bool netpieEnabled() { return strlen(SDL_NETPIE_CLIENT_ID) > 0; }
+
+bool ensureNetpie() {
+  if (netpie.connected()) return true;
+  if (millis() - lastNetpieTryMs < netpieBackoffMs) return false;
+  lastNetpieTryMs = millis();
+
+  // Same rule as EMQX: verify the chain first, send the token only to a verified peer.
+  // PubSubClient reuses the already-open TLS session.
+  bool ok = netpieTls.connected() || netpieTls.connect(cfg::kNetpieHost, cfg::kNetpiePort);
+  // NETPIE2020: client id = device Client ID, username = Token, password = Secret.
+  ok = ok && netpie.connect(SDL_NETPIE_CLIENT_ID, SDL_NETPIE_TOKEN, SDL_NETPIE_SECRET);
+  if (!ok) {
+    netpieFails++;
+    netpieTls.stop();
+    netpieBackoffMs = netpieBackoffMs * 2 > cfg::kNetpieRetryMaxMs ? cfg::kNetpieRetryMaxMs
+                                                                   : netpieBackoffMs * 2;
+    Serial.printf("[netpie] connect failed (state %d), retry in %lu s\n", netpie.state(),
+                  static_cast<unsigned long>(netpieBackoffMs / 1000));
+    return false;
+  }
+  netpieBackoffMs = cfg::kNetpieRetryMinMs;
+  netpie.subscribe(cfg::kTopicCmd);  // the dashboard's NETPIE source sends @msg/sdl/cmd here
+  netpieShadowDue = true;
+  Serial.println("[netpie] connected, mirroring state into the gateway shadow");
+  return true;
+}
+
+// Shadow write: {"data":{...}} with the same flat fields as @msg/sdl/gw/state. Fields that
+// are in the device schema with Feed enabled are also stored as time series.
+void publishNetpieShadow() {
+  JsonDocument doc;
+  fillState(doc["data"].to<JsonObject>());
+  char payload[2048];
+  if (measureJson(doc) >= sizeof(payload)) {
+    Serial.println("[netpie] shadow snapshot too large, skipped");
+    return;
+  }
+  size_t n = serializeJson(doc, payload, sizeof(payload));
+  if (!netpie.publish(cfg::kNetpieTopicShadow, reinterpret_cast<const uint8_t *>(payload), n)) {
+    Serial.println("[netpie] shadow publish failed");
+  }
 }
 
 // Which kind of reset brought the firmware back — the first thing to look at after a mystery reboot.
@@ -244,6 +337,8 @@ void publishGatewayTelemetry() {
   doc["ip"] = WiFi.localIP().toString();
   doc["wifi_retries"] = wifiRetries;
   doc["mqtt_fails"] = mqttFails;
+  doc["netpie_up"] = netpie.connected() ? 1 : 0;  // the mirror; absent from NETPIE itself
+  doc["netpie_fails"] = netpieFails;
   doc["ntp"] = timeValid() ? 1 : 0;
   doc["time"] = app::nowEpoch();
   doc["heap"] = ESP.getFreeHeap();
@@ -379,10 +474,11 @@ void sendDiscord(const char *text) {
   if (code != 204 && code != 200) Serial.printf("[cloud] Discord HTTP %d\n", code);
 }
 
-void handleAlerts(bool httpUp, bool mqttUp) {
+void handleAlerts(bool httpUp, bool mqttUp, bool netpieUp) {
   app::Alert a;
   while (xQueueReceive(app::qAlerts, &a, 0) == pdTRUE) {
     if (mqttUp) mqtt.publish(cfg::kTopicAlert, a.text);
+    if (netpieUp) netpie.publish(cfg::kTopicAlert, a.text);
     if (httpUp) sendDiscord(a.text);
   }
 }
@@ -463,12 +559,30 @@ void task(void *) {
   mqtt.setKeepAlive(cfg::kMqttKeepAliveSec);
   mqtt.setSocketTimeout(5);
 
+  if (netpieEnabled()) {
+#if defined(ALLOW_INSECURE_TLS)
+    netpieTls.setInsecure();
+#else
+    ca::useBuiltin(netpieTls);
+#endif
+    netpieTls.setHandshakeTimeout(10);
+    netpie.setServer(cfg::kNetpieHost, cfg::kNetpiePort);
+    netpie.setCallback(onMqttMessage);
+    netpie.setBufferSize(2304);  // the shadow snapshot (<2048) plus MQTT header
+    netpie.setKeepAlive(cfg::kMqttKeepAliveSec);
+    netpie.setSocketTimeout(5);
+  } else {
+    Serial.println("[netpie] NETPIE_CLIENT_ID empty: mirror off, EMQX only");
+  }
+
   for (;;) {
     bool wifiUp = ensureWifi();
     bool tlsReady = wifiUp && ensureTime();  // chain checks need a real clock
     bool mqttUp = tlsReady && ensureMqtt();
     updateOnlineState(mqttUp);
     if (mqttUp) mqtt.loop();
+    bool netpieUp = tlsReady && netpieEnabled() && ensureNetpie();
+    if (netpieUp) netpie.loop();
 
     // New readings from the nodes: publish now, or keep them for later.
     app::TelemetryRecord rec;
@@ -509,7 +623,14 @@ void task(void *) {
       publishGatewayTelemetry();
     }
 
-    handleAlerts(wifiUp && tlsReady, mqttUp);
+    if (netpieUp && (netpieShadowDue ||
+                     millis() - lastNetpieShadowMs >= cfg::kNetpieShadowPeriodMs)) {
+      netpieShadowDue = false;
+      lastNetpieShadowMs = millis();
+      publishNetpieShadow();
+    }
+
+    handleAlerts(wifiUp && tlsReady, mqttUp, netpieUp);
     maybeRunAi(wifiUp && tlsReady);
 
     {
