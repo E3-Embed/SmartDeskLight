@@ -21,6 +21,7 @@ interface DbGlobal {
   __sdlDbFails?: number;
   __sdlDbLastError?: string | null;
   __sdlDbRetryAt?: number;
+  __sdlDbOkAt?: number;
 }
 
 const globalRef = globalThis as unknown as DbGlobal;
@@ -101,6 +102,7 @@ export async function fetchSamples(
 
     globalRef.__sdlDbLastError = null;
     globalRef.__sdlDbRetryAt = 0;
+    globalRef.__sdlDbOkAt = Date.now();
     return samples;
   } catch (error) {
     return fail(error);
@@ -109,11 +111,24 @@ export async function fetchSamples(
 
 export function dbStatus() {
   const retryAt = globalRef.__sdlDbRetryAt ?? 0;
+  const lastError = globalRef.__sdlDbLastError ?? null;
+  const okAt = globalRef.__sdlDbOkAt ?? 0;
+  // "unknown" means the dashboard has not queried the database yet.
+  const state = !dbEnabled
+    ? ("disabled" as const)
+    : lastError != null
+      ? ("error" as const)
+      : okAt > 0
+        ? ("ok" as const)
+        : ("unknown" as const);
+
   return {
     enabled: dbEnabled,
-    available: dbEnabled && (globalRef.__sdlDbLastError ?? null) == null,
+    state,
+    available: state === "ok" || state === "unknown",
     fails: globalRef.__sdlDbFails ?? 0,
-    lastError: globalRef.__sdlDbLastError ?? null,
+    lastError,
+    lastOkAt: okAt > 0 ? okAt : null,
     retryInMs: Math.max(0, retryAt - Date.now()),
   };
 }
