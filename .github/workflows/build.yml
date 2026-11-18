@@ -3,12 +3,28 @@ name: Firmware build
 on:
   push:
     branches: [main]
-    paths: ['firmware/**', '.github/workflows/build.yml']
+    paths: ['firmware/**', 'tests/**', '.github/workflows/build.yml']
   pull_request:
-    paths: ['firmware/**', '.github/workflows/build.yml']
+    paths: ['firmware/**', 'tests/**', '.github/workflows/build.yml']
   workflow_dispatch:
 
 jobs:
+  sensor-host-tests:
+    name: Sensor host tests (Arduino ${{ matrix.arduino }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arduino: [2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile current production source against hardware mocks
+        run: >-
+          g++ -std=c++14 -Wall -Wextra -Werror
+          -DESP_ARDUINO_VERSION_MAJOR=${{ matrix.arduino }}
+          -Itests/sensor_node_host -Ifirmware/sensor_node/include -Ifirmware/common
+          tests/sensor_node_host/test.cpp -o /tmp/sensor-tests
+      - name: Run sensor and communication tests
+        run: /tmp/sensor-tests
   build:
     name: Build ${{ matrix.project }}
     runs-on: ubuntu-latest

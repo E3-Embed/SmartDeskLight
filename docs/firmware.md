@@ -17,9 +17,9 @@ ISR และ callback ของ ESP-NOW ทำแค่ใส่งานลง
 |---|---|:-:|
 | **E1** RTOS multitasking | 4 task ที่กำหนด priority อย่างมีเหตุผล พร้อม queue และ event group | 🟡 วางโครงแล้ว |
 | **E2** Interrupt-driven I/O | ISR ของปุ่มหยุด → `xQueueSendFromISR` → `ControlTask` | 🟡 วางโครงแล้ว |
-| **E4** Reliable communication | seq + ACK/ส่งซ้ำ ระหว่างโหนดกับเกตเวย์, ring buffer ขณะออฟไลน์ | 🟡 วางโครงแล้ว |
+| **E4** Reliable communication | seq + ACK/ส่งซ้ำ ระหว่างโหนดกับเกตเวย์, ring buffer ขณะออฟไลน์ | 🟡 ฝั่งโหนดทดสอบบนบอร์ดแล้ว (ACK 411/411 ใน ~5 นาที) · ring buffer ฝั่งเกตเวย์ยังไม่ได้ทดสอบ |
 | **E5** Security | MQTTS ตรวจ CA + device token, HTTPS ไปยัง AI/Discord, ข้อมูลลับไม่อยู่ใน git | ⚪ วางแผนไว้ |
-| **E8** Low-level driver | ไดรเวอร์ I²C ระดับรีจิสเตอร์ที่เขียนเองสำหรับ BH1750, TCS34725 และ INA219 | ⚪ วางแผนไว้ |
+| **E8** Low-level driver | ไดรเวอร์ I²C ระดับรีจิสเตอร์ที่เขียนเองสำหรับ BH1750, TCS34725 และ INA219 | 🟡 BH1750/TCS34725 (โหนด) เสร็จและทดสอบบนบอร์ดแล้ว · INA219 ดูส่วนเกตเวย์ |
 
 ---
 

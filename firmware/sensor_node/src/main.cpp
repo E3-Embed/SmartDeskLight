@@ -54,6 +54,8 @@ uint32_t gLastHeartbeatMs = 0;
 uint32_t gLastSensorMs = 0;
 uint32_t gSensorMisses = 0;
 uint32_t gLastScanMs = 0;
+uint32_t gLastPresenceReportMs = 0;
+constexpr uint32_t kPresenceReportPeriodMs = 3000;
 esp_reset_reason_t gResetReason = ESP_RST_UNKNOWN;
 
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
@@ -222,12 +224,20 @@ void setup() {
   esp_now_register_recv_cb(onRecv);
 
   gLastScanMs = millis();
-  sensors::begin();  // bus + probe; the drivers themselves are still TODO in sensors.cpp
+  sensors::begin();  // bus + probe; conversion waits are handled by sensors::read()
   linkUp();
 }
 
 void loop() {
   const uint32_t now = millis();
+
+  // Report independently of the gateway, including after USB serial reconnects.
+  if (now - gLastPresenceReportMs >= kPresenceReportPeriodMs) {
+    gLastPresenceReportMs = now;
+    Serial.printf("[diag] node=%u uptime=%lus link=%s\n", nodecfg::kNodeId,
+                  static_cast<unsigned long>(now / 1000), gLinked ? "linked" : "searching");
+    sensors::reportPresence();
+  }
 
   if (!gLinked) {
     if (now - gLastScanMs >= nodecfg::kScanRetryMs) {
@@ -255,11 +265,11 @@ void loop() {
     if (sensors::lightSensorPresent() && sensors::read(s) && s.bh1750Ok) {
       gSensorMisses = 0;
       SdlTelemetry pkt = buildTelemetry(++gSeq, s);
-      if (!sendAndWait(gGatewayMac, &pkt, sizeof(pkt), pkt.seq, 1 + SDL_MAX_RETRY,
-                       SDL_ACK_TIMEOUT_MS, gGatewayMac)) {
-        Serial.printf("[sensor] telemetry seq=%lu not acked\n",
-                      static_cast<unsigned long>(pkt.seq));
-      }
+      const bool acked = sendAndWait(gGatewayMac, &pkt, sizeof(pkt), pkt.seq, 1 + SDL_MAX_RETRY,
+                                    SDL_ACK_TIMEOUT_MS, gGatewayMac);
+      Serial.printf("[sensor] seq=%lu lux=%.2f r=%u g=%u b=%u c=%u cct=%u tcs_ok=%u ack=%u\n",
+                    static_cast<unsigned long>(pkt.seq), s.lux, s.r, s.g, s.b, s.c, s.cct,
+                    s.tcsOk ? 1 : 0, acked ? 1 : 0);
     } else if (++gSensorMisses % 30 == 1) {
       Serial.printf("[sensor] no reading (%lu in a row)\n",
                     static_cast<unsigned long>(gSensorMisses));

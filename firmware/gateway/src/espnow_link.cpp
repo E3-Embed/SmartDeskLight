@@ -158,14 +158,20 @@ void rxTask(void *) {
     // on the telemetry queue.
     if (xQueueReceive(app::qTelemetry, &pkt, pdMS_TO_TICKS(100)) == pdTRUE) {
       if (updateNodeTable(pkt)) {
+        if (cfg::kLocalLinkTest) {
+          Serial.printf("[espnow] node %u seq=%lu lux=%.2f r=%u g=%u b=%u c=%u cct=%u\n",
+                        pkt.node_id, static_cast<unsigned long>(pkt.seq), pkt.lux,
+                        pkt.r, pkt.g, pkt.b, pkt.c, pkt.cct);
+        }
         app::TelemetryRecord rec{pkt, app::nowEpoch()};
-        if (xQueueSend(app::qCloud, &rec, 0) != pdTRUE) {
+        if (!cfg::kLocalLinkTest && xQueueSend(app::qCloud, &rec, 0) != pdTRUE) {
           Serial.println("[espnow] cloud queue full, reading dropped");
         }
       }
     }
     while (xQueueReceive(app::qNodeSys, &sys, 0) == pdTRUE) {
       updateNodeSys(sys);
+      if (cfg::kLocalLinkTest) continue;
       app::NodeSysRecord rec{sys, app::nowEpoch()};
       if (xQueueSend(app::qCloudSys, &rec, 0) != pdTRUE) {
         Serial.println("[espnow] cloud sys queue full, heartbeat dropped");
