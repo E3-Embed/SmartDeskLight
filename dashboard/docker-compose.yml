@@ -1,5 +1,11 @@
 name: sdl-dashboard
 
+# Local Postgres for testing the read-only history path:
+#   docker compose up -d
+#   psql -f db/schema.sql   (then seed a few rows)
+#   DATABASE_URL=postgres://sdl:sdl@127.0.0.1:5432/sdl
+# Production history is written by the EMQX connector, not by this compose file.
+
 services:
   postgres:
     image: postgres:17-alpine

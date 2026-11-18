@@ -39,23 +39,24 @@ struct แบบ packed นิยามไว้ใน [`firmware/common/message
 | Topic | ทิศทาง | ข้อมูล |
 |---|---|---|
 | `@msg/sdl/gw/telemetry` | เกตเวย์ → คลาวด์ | สถานะเกตเวย์ (Wi-Fi, MQTT, NTP, heap, uptime, reset reason) ทุก 2 วินาที |
-| `@msg/sdl/sensor/telemetry` | เกตเวย์ → คลาวด์ | ข้อมูลของโหนดเซนเซอร์หนึ่งชุด — heartbeat ทุก 2 วินาที และค่าที่วัดได้เมื่อไดรเวอร์เสร็จ; `node_id` ระบุว่าเป็นโหนดไหน |
-| `@msg/sdl/gw/state` | เกตเวย์ → คลาวด์ | snapshot ล่าสุดของทุกโหนดและสถานะโคม สำหรับ Dashboard (ทุก 30 วินาที) |
+| `@msg/sdl/gw/state` | เกตเวย์ → คลาวด์ | snapshot ล่าสุดของทุกโหนดและสถานะโคม สำหรับ Dashboard (ทุก ~10 วินาที) — มีฟิลด์ `ts` (epoch วินาที, 0 จนกว่า NTP จะ sync) |
+| `@msg/sdl/sensor/telemetry` | เกตเวย์ → คลาวด์ | ค่าที่วัดได้ของโหนด (`lux, r, g, b, c, cct`), `node_id` บอกว่าโหนดไหน; ส่งเฉพาะเมื่อ BH1750 อ่านสำเร็จ |
+| `@msg/sdl/sensor/health` | เกตเวย์ → คลาวด์ | heartbeat/สุขภาพบอร์ดของโหนด (`uptime_s, heap, temp_c, reset, tx_acked, tx_attempts`) ทุก 2 วินาที |
 | `@msg/sdl/cmd` | แดชบอร์ด → เกตเวย์ | โหมดกิจกรรม หรือ feedback จากผู้ใช้ |
 | `@msg/sdl/alert` | เกตเวย์ → คลาวด์ | ข้อความแจ้งเตือน (ส่งเข้า Discord ด้วย) |
-| `@msg/sdl/gateway/status` | เกตเวย์ → คลาวด์ | `"online"` / `"offline"` แบบ **retained** — ตัวเกตเวย์ประกาศ `online` ตอนเชื่อมต่อ และ broker ประกาศ `offline` แทนผ่าน MQTT Last Will เมื่อขาดการเชื่อมต่อเกิน keepalive (30 วินาที) |
+| `@msg/sdl/gw/status` | เกตเวย์ → คลาวด์ | `"online"` / `"offline"` แบบ **retained** — ตัวเกตเวย์ประกาศ `online` ตอนเชื่อมต่อ และ broker ประกาศ `offline` แทนผ่าน MQTT Last Will เมื่อขาดการเชื่อมต่อเกิน keepalive (30 วินาที) |
 | `@msg/sdl/sensor/status` | เกตเวย์ → คลาวด์ | presence ของโหนดแบบ **retained**: `{"ts":…,"N1":"online","N2":"offline"}` — เกตเวย์เขียนแทนโหนดเพราะโหนดไม่มี MQTT session ของตัวเอง |
 
-topic ทั้งหมดเป็น topic MQTT ธรรมดาบน EMQX ของเรา (`@` นำหน้าได้ตามสเปก) จึงไม่ต้องประกาศ alias แบบ NETPIE; เฟิร์มแวร์ publish ด้วย QoS 0 และ retain เฉพาะ `@msg/sdl/gateway/status` กับ `@msg/sdl/sensor/status`
+topic ทั้งหมดเป็น topic MQTT ธรรมดาบน EMQX ของเรา (`@` นำหน้าได้ตามสเปก) จึงไม่ต้องประกาศ alias แบบ NETPIE; เฟิร์มแวร์ publish ด้วย QoS 0 และ retain เฉพาะ `@msg/sdl/gw/status` กับ `@msg/sdl/sensor/status`
 
-`@msg/sdl/gateway/status` เป็น retained: แดชบอร์ดที่เพิ่ง subscribe จะได้สถานะล่าสุดทันทีโดยไม่ต้องรอรอบถัดไป จึงใช้แทนการเดาจาก `uptime_s` ใน `@msg/sdl/gw/telemetry` ได้
+`@msg/sdl/gw/status` เป็น retained: แดชบอร์ดที่เพิ่ง subscribe จะได้สถานะล่าสุดทันทีโดยไม่ต้องรอรอบถัดไป จึงใช้แทนการเดาจาก `uptime_s` ใน `@msg/sdl/gw/telemetry` ได้
 
 `@msg/sdl/sensor/status` เป็น retained แผนที่เดียวที่เกตเวย์เขียนแทนโหนด: `online` เมื่อมี heartbeat หรือค่าที่วัดได้ภายใน 10 วินาที (`kNodeStaleMs`) และ `offline` เมื่อเงียบกว่านั้น แต่ละโหนดมี key `N<id>`; โหนดที่เกตเวย์ยังไม่เคยเห็นในรอบบูตนี้จะไม่มี key (แปลว่าไม่ทราบสถานะ) เกตเวย์เขียนซ้ำทุกครั้งที่สถานะเปลี่ยน ทุกครั้งที่เชื่อมต่อใหม่ และทุก 30 วินาทีเพื่อให้ `ts` ใช้เป็นอายุของข้อมูลได้
 
 > [!IMPORTANT]
 > ถ้าเกตเวย์ออฟไลน์ จะไม่มีใครอัปเดต `@msg/sdl/sensor/status` ได้ — ค่าที่ค้างอยู่จะยังเป็น `online` แดชบอร์ดจึงต้องถือว่า presence ของโหนดใช้ได้เฉพาะเมื่อ `@msg/sdl/gateway/status` เป็น `online` หรือเทียบ `ts` กับเวลาปัจจุบัน
 
-heartbeat ของโหนดบน `@msg/sdl/sensor/telemetry` (ค่าสุขภาพของบอร์ด):
+heartbeat ของโหนดบน `@msg/sdl/sensor/health` (ค่าสุขภาพของบอร์ด):
 
 ```json
 {"node_id":"N1","seq":42,"ts":1730300000,"node_ms":41200,"uptime_s":41,
@@ -75,10 +76,14 @@ heartbeat ของโหนดบน `@msg/sdl/sensor/telemetry` (ค่าส�
 snapshot บน `@msg/sdl/gw/state`:
 
 ```json
-{"device":"sdl-gateway","n1_lux":412.5,"n1_cct":4300,"n1_up_s":41,"n1_heap":233472,
- "n1_sys_age_s":0,"dist_mm":550,"presence":1,"lamp_mW":3120,"filters":[1,0,0],
- "pwm":180,"mode":"reading"}
+{"device":"sdl-gateway","ts":1795003828,"n1_lux":412.5,"n1_cct":4300,"n1_up_s":41,
+ "n1_heap":233472,"n1_sys_age_s":0,"dist_mm":550,"presence":1,"lamp_mW":3120,
+ "diffuser":1,"nd":0,"warm":0,"pwm":180,"safe":0,"mode":"reading",
+ "target_lux":500,"target_cct":4000,"ai":0,"buffered":0,"dropped":0,
+ "heap":182296,"uptime_s":1541}
 ```
+
+`ts` เป็น epoch วินาทีของเกตเวย์ (0 จนกว่า NTP จะ sync) — ใช้จัดลำดับ/คำนวณอายุข้อมูลได้
 
 ## เกตเวย์ ↔ AI · HTTPS
 

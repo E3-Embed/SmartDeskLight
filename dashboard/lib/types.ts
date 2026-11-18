@@ -2,24 +2,36 @@ export type Mode = "reading" | "coding" | "drawing";
 
 export type LinkState = "connecting" | "online" | "offline" | "error";
 
-export type SourceKind = "mock" | "mqtt" | "netpie";
+export type SourceKind = "mock" | "mqtt";
 
-/** One row of the timeseries the charts draw. `t` is epoch milliseconds. */
+/**
+ * One row of the timeseries the charts draw. `t` is epoch milliseconds.
+ *
+ * Only `lux` is guaranteed: rows read back from Postgres carry `lux`/`cct`
+ * but no targets or PWM, so those stay optional and the charts hide the
+ * corresponding lines when they are missing.
+ */
 export interface Sample {
   t: number;
   lux: number;
-  cct: number;
-  targetLux: number;
-  targetCct: number;
-  pwm: number;
+  cct?: number;
+  targetLux?: number;
+  targetCct?: number;
+  pwm?: number;
 }
 
-export interface Shadow {
+/** `@msg/sdl/gw/state` — flat snapshot of the lamp plus every node's last value. */
+export interface GatewaySnapshot {
+  device?: string;
   n1_lux?: number;
   n1_cct?: number;
   n1_age_s?: number;
   n1_rx?: number;
   n1_seq?: number;
+  n1_up_s?: number;
+  n1_heap?: number;
+  n1_temp_c?: number;
+  n1_sys_age_s?: number;
   dist_mm?: number;
   presence?: number;
   lamp_mW?: number;
@@ -41,7 +53,8 @@ export interface Shadow {
   [key: string]: number | string | undefined;
 }
 
-export interface Sys {
+/** `@msg/sdl/gw/telemetry` — gateway health, published every 2 s. */
+export interface GatewayTelemetry {
   device?: string;
   uptime_s?: number;
   wifi_up?: number;
@@ -66,18 +79,51 @@ export interface Sys {
   [key: string]: number | string | undefined;
 }
 
-export interface Telemetry {
+/** `@msg/sdl/sensor/telemetry` — BH1750 lux plus TCS34725 raw channels. */
+export interface SensorTelemetry {
   node_id?: string;
   seq?: number;
   ts?: number;
   node_ms?: number;
   lux?: number;
-  cct?: number;
   r?: number;
   g?: number;
   b?: number;
   c?: number;
+  cct?: number;
   [key: string]: number | string | undefined;
+}
+
+/** `@msg/sdl/sensor/health` — node heartbeat, published every 2 s. */
+export interface SensorHealth {
+  node_id?: string;
+  seq?: number;
+  ts?: number;
+  node_ms?: number;
+  uptime_s?: number;
+  heap?: number;
+  heap_min?: number;
+  wifi_ch?: number;
+  reset?: string;
+  temp_c?: number;
+  tx_acked?: number;
+  tx_attempts?: number;
+  [key: string]: number | string | undefined;
+}
+
+/** `@msg/sdl/sensor/status` — retained presence map written by the gateway. */
+export interface SensorStatus {
+  ts?: number;
+  [node: string]: number | string | undefined;
+}
+
+export interface SensorState {
+  status: SensorStatus | null;
+  statusAt: number | null;
+  telemetry: SensorTelemetry | null;
+  telemetryAt: number | null;
+  health: SensorHealth | null;
+  healthAt: number | null;
 }
 
 export interface Alert {
@@ -91,13 +137,14 @@ export interface PublicState {
   source: SourceKind;
   link: LinkState;
   linkError: string | null;
+  /** Gateway Last Will value from `gw/status`. */
   status: "online" | "offline" | null;
-  shadow: Shadow | null;
-  shadowAt: number | null;
-  sys: Sys | null;
-  sysAt: number | null;
-  telemetry: Telemetry | null;
-  telemetryAt: number | null;
+  statusAt: number | null;
+  snapshot: GatewaySnapshot | null;
+  snapshotAt: number | null;
+  gateway: GatewayTelemetry | null;
+  gatewayAt: number | null;
+  sensors: SensorState;
   alerts: Alert[];
   mockScenario: string | null;
   serverTime: number;

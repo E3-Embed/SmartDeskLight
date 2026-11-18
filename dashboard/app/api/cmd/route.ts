@@ -1,7 +1,6 @@
 import { mockCommand } from "@/lib/mock";
 import { ensureSource, sourceKind } from "@/lib/source";
 import { publishCmd } from "@/lib/source/mqtt";
-import { netpiePublish } from "@/lib/source/netpie";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -83,17 +82,6 @@ export async function POST(request: Request) {
   if (sourceKind() === "mock") {
     mockCommand(command);
     return Response.json({ ok: true, simulated: true, command, at: now });
-  }
-
-  if (sourceKind() === "netpie") {
-    const result = await netpiePublish(command as Record<string, string>);
-    if (!result.ok) {
-      return Response.json(
-        { ok: false, error: result.error ?? "ส่งคำสั่งไป NETPIE ไม่สำเร็จ" },
-        { status: 503 },
-      );
-    }
-    return Response.json({ ok: true, simulated: false, via: "netpie", command, at: now });
   }
 
   const published = publishCmd(
