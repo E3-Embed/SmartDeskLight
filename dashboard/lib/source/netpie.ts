@@ -1,10 +1,6 @@
 import mqtt, { type MqttClient } from "mqtt";
-import {
-  applyMessage,
-  setLink,
-  TOPIC_PREFIX,
-  TOPIC_SHADOW,
-} from "../store";
+import { applyMessage, setLink } from "../store";
+import { TOPIC_GATEWAY_STATE, TOPIC_PREFIX } from "../topics";
 
 const MQTT_URL = process.env.NETPIE_MQTT_URL ?? "mqtts://mqtt.netpie.io:8883";
 const API_URL = process.env.NETPIE_API_URL ?? "https://api.netpie.io/v2/device";
@@ -37,7 +33,7 @@ async function pullShadow(): Promise<void> {
     const json = (await response.json()) as { data?: Record<string, unknown> };
     const data = json?.data ?? {};
     if (Object.keys(data).length > 0) {
-      applyMessage(TOPIC_SHADOW, JSON.stringify({ data }));
+      applyMessage(TOPIC_GATEWAY_STATE, JSON.stringify({ data }));
     }
   } catch (error) {
     setLink("error", error instanceof Error ? error.message : String(error));
@@ -85,7 +81,7 @@ export function startNetpie(): void {
       try {
         const body = JSON.parse(text) as Record<string, unknown>;
         const wrapped = body && typeof body.data === "object" ? body : { data: body };
-        applyMessage(TOPIC_SHADOW, JSON.stringify(wrapped));
+        applyMessage(TOPIC_GATEWAY_STATE, JSON.stringify(wrapped));
       } catch {
         // ignore malformed shadow payloads
       }

@@ -18,35 +18,78 @@ export function rangeById(id: string | null): HistoryRange {
   return HISTORY_RANGES.find((range) => range.id === id) ?? HISTORY_RANGES[0];
 }
 
-/** Averages samples into buckets so the chart never draws more than ~240 points. */
+interface Bucket {
+  t: number;
+  count: number;
+  lux: number;
+  cct: { sum: number; n: number };
+  targetLux: { sum: number; n: number };
+  targetCct: { sum: number; n: number };
+  pwm: { sum: number; n: number };
+}
+
+function add(acc: { sum: number; n: number }, value: number | undefined) {
+  if (value == null || !Number.isFinite(value)) return;
+  acc.sum += value;
+  acc.n += 1;
+}
+
+function average(acc: { sum: number; n: number }): number | undefined {
+  return acc.n > 0 ? acc.sum / acc.n : undefined;
+}
+
+/**
+ * Averages samples into buckets so the chart never draws more than ~240 points.
+ * Optional fields stay absent when no sample in the bucket carried them — that
+ * is how 30 min / 2 h history from Postgres loses its target and PWM lines.
+ */
 export function downsample(samples: Sample[], bucketMs: number): Sample[] {
   if (samples.length === 0) return [];
   if (bucketMs <= 0) return samples.slice(-240);
 
-  const buckets = new Map<number, { sum: Sample; count: number }>();
+  const buckets = new Map<number, Bucket>();
   for (const sample of samples) {
     const key = Math.floor(sample.t / bucketMs) * bucketMs;
     const entry = buckets.get(key);
     if (entry) {
-      entry.sum.lux += sample.lux;
-      entry.sum.cct += sample.cct;
-      entry.sum.targetLux += sample.targetLux;
-      entry.sum.targetCct += sample.targetCct;
-      entry.sum.pwm += sample.pwm;
       entry.count += 1;
+      entry.lux += sample.lux;
+      add(entry.cct, sample.cct);
+      add(entry.targetLux, sample.targetLux);
+      add(entry.targetCct, sample.targetCct);
+      add(entry.pwm, sample.pwm);
     } else {
-      buckets.set(key, { sum: { ...sample, t: key }, count: 1 });
+      buckets.set(key, {
+        t: key,
+        count: 1,
+        lux: sample.lux,
+        cct: { sum: 0, n: 0 },
+        targetLux: { sum: 0, n: 0 },
+        targetCct: { sum: 0, n: 0 },
+        pwm: { sum: 0, n: 0 },
+      });
+      if (sample.cct != null) add(buckets.get(key)!.cct, sample.cct);
+      if (sample.targetLux != null) add(buckets.get(key)!.targetLux, sample.targetLux);
+      if (sample.targetCct != null) add(buckets.get(key)!.targetCct, sample.targetCct);
+      if (sample.pwm != null) add(buckets.get(key)!.pwm, sample.pwm);
     }
   }
 
   return [...buckets.entries()]
     .sort((a, b) => a[0] - b[0])
-    .map(([, { sum, count }]) => ({
-      t: sum.t,
-      lux: Number((sum.lux / count).toFixed(1)),
-      cct: Math.round(sum.cct / count),
-      targetLux: Math.round(sum.targetLux / count),
-      targetCct: Math.round(sum.targetCct / count),
-      pwm: Math.round(sum.pwm / count),
-    }));
+    .map(([, bucket]) => {
+      const sample: Sample = {
+        t: bucket.t,
+        lux: Number((bucket.lux / bucket.count).toFixed(1)),
+      };
+      const cct = average(bucket.cct);
+      if (cct != null) sample.cct = Math.round(cct);
+      const targetLux = average(bucket.targetLux);
+      if (targetLux != null) sample.targetLux = Math.round(targetLux);
+      const targetCct = average(bucket.targetCct);
+      if (targetCct != null) sample.targetCct = Math.round(targetCct);
+      const pwm = average(bucket.pwm);
+      if (pwm != null) sample.pwm = Math.round(pwm);
+      return sample;
+    });
 }

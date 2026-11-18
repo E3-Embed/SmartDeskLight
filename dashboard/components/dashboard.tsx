@@ -33,12 +33,19 @@ const EMPTY_STATE: PublicState = {
   link: "connecting",
   linkError: null,
   status: null,
-  shadow: null,
-  shadowAt: null,
-  sys: null,
-  sysAt: null,
-  telemetry: null,
-  telemetryAt: null,
+  statusAt: null,
+  snapshot: null,
+  snapshotAt: null,
+  gateway: null,
+  gatewayAt: null,
+  sensors: {
+    status: null,
+    statusAt: null,
+    telemetry: null,
+    telemetryAt: null,
+    health: null,
+    healthAt: null,
+  },
   alerts: [],
   mockScenario: null,
   serverTime: 0,
@@ -115,6 +122,7 @@ export function Dashboard() {
   const [live, setLive] = useState<"connecting" | "open" | "closed">("connecting");
   const [rangeId, setRangeId] = useState("5m");
   const [history, setHistory] = useState<Sample[] | null>(null);
+  const [historySource, setHistorySource] = useState<string | null>(null);
   const [pending, setPending] = useState<{ value: Mode; at: number } | null>(null);
   const [cooldownUntil, setCooldownUntil] = useState(0);
   const [toast, setToast] = useState<{ text: string; tone: "ok" | "alert" } | null>(null);
@@ -175,8 +183,11 @@ export function Dashboard() {
       try {
         const response = await fetch(`/api/history?range=${rangeId}`, { cache: "no-store" });
         if (!response.ok) return;
-        const data = (await response.json()) as { samples: Sample[] };
-        if (!cancelled) setHistory(data.samples);
+        const data = (await response.json()) as { samples: Sample[]; source?: string };
+        if (!cancelled) {
+          setHistory(data.samples);
+          setHistorySource(data.source ?? null);
+        }
       } catch {
         // live ring buffer stays the fallback
       }
@@ -320,6 +331,7 @@ export function Dashboard() {
         range={range}
         onRange={setRangeId}
         derived={derived}
+        historySource={historySource}
         className="flex-[3]"
       />
       <CctPanel
@@ -340,7 +352,7 @@ export function Dashboard() {
   const healthChecks = [
     {
       label: "โหนด N1 ส่งข้อมูลปกติ",
-      ok: (state?.shadow?.n1_age_s ?? 0) <= 10 && state?.shadow != null,
+      ok: derived.nodeOnline && (state?.snapshot?.n1_age_s ?? 0) <= 10,
     },
     {
       label: "เชื่อมต่อคลาวด์อยู่",

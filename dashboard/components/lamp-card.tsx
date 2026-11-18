@@ -475,7 +475,10 @@ export function LampCard({
 
       <div className="relative flex shrink-0 items-center justify-between gap-3 border-t border-line bg-surface-2/40 px-4 py-1.5 text-[10.5px] text-muted">
         <span className="truncate">
-          node N1 · {state?.telemetry?.seq != null ? `seq ${state.telemetry.seq}` : "seq —"}
+          node N1 ·{" "}
+          {state?.sensors.telemetry?.seq != null
+            ? `seq ${state.sensors.telemetry.seq}`
+            : "seq —"}
         </span>
         <span className="truncate">
           lamp {formatChip(derived.powerMw)} · {derived.mode}

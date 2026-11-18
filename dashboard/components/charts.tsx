@@ -20,6 +20,7 @@ interface PanelProps {
   onRange: (id: string) => void;
   derived: Derived;
   className?: string;
+  historySource?: string | null;
 }
 
 function stepPath(points: { x: number; y: number }[]): string {
@@ -106,25 +107,39 @@ export function LuxPanel({
   range,
   onRange,
   derived,
+  historySource = null,
   className = "",
 }: PanelProps) {
   const gradientId = useId().replace(/:/g, "");
-  const peak = Math.max(400, ...samples.map((sample) => Math.max(sample.lux, sample.targetLux)));
+  const peak = Math.max(
+    400,
+    ...samples.map((sample) => Math.max(sample.lux, sample.targetLux ?? 0)),
+  );
   const domainMax =
     [400, 500, 600, 800, 1000, 1200].find((value) => value >= peak * 1.12) ??
     Math.ceil((peak * 1.12) / 200) * 200;
 
   const geometry = useMemo(() => {
     const start = now - range.ms;
-    const visible = samples.filter((sample) => sample.t >= start - 1000);
+    const visible = samples.filter(
+      (sample) => sample.t >= start - 1000 && Number.isFinite(sample.lux),
+    );
     const toPoint = (value: number, t: number) => ({
       x: clamp(((t - start) / range.ms) * 100, 0, 100),
       y: 100 - clamp((value / domainMax) * 100, 0, 100),
     });
     const luxPoints = visible.map((sample) => toPoint(sample.lux, sample.t));
-    const targetPoints = visible.map((sample) => toPoint(sample.targetLux, sample.t));
-    const upper = visible.map((sample) => toPoint(sample.targetLux * 1.07, sample.t));
-    const lower = visible.map((sample) => toPoint(sample.targetLux * 0.93, sample.t));
+    // History read back from Postgres has no targets, so those lines drop out.
+    const withTarget = visible.filter((sample) => sample.targetLux != null);
+    const targetPoints = withTarget.map((sample) =>
+      toPoint(sample.targetLux as number, sample.t),
+    );
+    const upper = withTarget.map((sample) =>
+      toPoint((sample.targetLux as number) * 1.07, sample.t),
+    );
+    const lower = withTarget.map((sample) =>
+      toPoint((sample.targetLux as number) * 0.93, sample.t),
+    );
 
     const band =
       upper.length > 1
@@ -141,7 +156,7 @@ export function LuxPanel({
         luxPoints.length > 1
           ? `${linePath(luxPoints)} L ${luxPoints[luxPoints.length - 1].x} 100 L ${luxPoints[0].x} 100 Z`
           : "",
-      target: stepPath(targetPoints),
+      target: targetPoints.length > 1 ? stepPath(targetPoints) : "",
       band,
       last: luxPoints[luxPoints.length - 1],
     };
@@ -153,13 +168,27 @@ export function LuxPanel({
     text: Math.round(domainMax * fraction).toLocaleString("en-US"),
   }));
 
+  const hasTarget = samples.some((sample) => sample.targetLux != null);
+
   return (
     <section className={`card flex min-h-0 flex-1 flex-col overflow-hidden ${className}`}>
       <div className="flex flex-col gap-2 px-4 pt-3 pb-1">
         <SectionHead
           title="กราฟความสว่าง"
           en="Illuminance history · lux"
-          right={<RangeTabs value={range.id} onChange={onRange} />}
+          right={
+            <div className="flex items-center gap-2">
+              {historySource === "memory" && range.id !== "5m" ? (
+                <span
+                  className="chip chip-mock"
+                  title="ต่อ Postgres ไม่ได้ จึงใช้ buffer ในหน่วยความจำของเซิร์ฟเวอร์"
+                >
+                  memory · DB ไม่ตอบสนอง
+                </span>
+              ) : null}
+              <RangeTabs value={range.id} onChange={onRange} />
+            </div>
+          }
         />
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-baseline gap-3">
@@ -182,13 +211,17 @@ export function LuxPanel({
             <span className="inline-flex items-center gap-1.5">
               <span className="inline-block h-[2px] w-4 rounded-full bg-amber" /> วัดจริง
             </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="inline-block h-[2px] w-4 rounded-full border-t border-dashed border-muted" />{" "}
-              เป้าหมาย
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="inline-block h-2 w-3 rounded-[3px] bg-amber-soft" /> ±7%
-            </span>
+            {hasTarget ? (
+              <>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="inline-block h-[2px] w-4 rounded-full border-t border-dashed border-muted" />{" "}
+                  เป้าหมาย
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="inline-block h-2 w-3 rounded-[3px] bg-amber-soft" /> ±7%
+                </span>
+              </>
+            ) : null}
           </div>
         </div>
       </div>
@@ -298,8 +331,16 @@ export function LuxPanel({
 
 export function CctPanel({ samples, now, range, derived, className = "" }: PanelProps) {
   const start = now - range.ms;
-  const visible = samples.filter((sample) => sample.t >= start - 1000);
-  const values = visible.length > 0 ? visible.map((sample) => sample.cct) : [3000];
+  // cct = 0 from the node means "no trustworthy reading", so those samples are
+  // dropped instead of dragging the axis down to 0 K.
+  const visible = samples.filter(
+    (sample) =>
+      sample.t >= start - 1000 &&
+      typeof sample.cct === "number" &&
+      sample.cct > 0,
+  );
+  const values =
+    visible.length > 0 ? visible.map((sample) => sample.cct as number) : [3000];
   const lo = Math.max(2000, Math.floor((Math.min(...values) - 250) / 500) * 500);
   const hi = Math.min(7000, Math.ceil((Math.max(...values) + 250) / 500) * 500);
   const min = lo;
@@ -310,8 +351,8 @@ export function CctPanel({ samples, now, range, derived, className = "" }: Panel
   {
     const points = visible.map((sample) => ({
       x: clamp(((sample.t - start) / range.ms) * 100, 0, 100),
-      y: toY(sample.cct),
-      cct: sample.cct,
+      y: toY(sample.cct as number),
+      cct: sample.cct as number,
     }));
     if (points.length >= 2) {
       for (let i = 1; i < points.length; i += 1) {
@@ -323,10 +364,12 @@ export function CctPanel({ samples, now, range, derived, className = "" }: Panel
     }
   }
 
-  const targetPoints = visible.map((sample) => ({
-    x: clamp(((sample.t - start) / range.ms) * 100, 0, 100),
-    y: toY(sample.targetCct),
-  }));
+  const targetPoints = visible
+    .filter((sample) => typeof sample.targetCct === "number")
+    .map((sample) => ({
+      x: clamp(((sample.t - start) / range.ms) * 100, 0, 100),
+      y: toY(sample.targetCct as number),
+    }));
 
   const mid = Math.round((min + Math.max(max, min + 1000)) / 200) * 100;
   const yLabels = [max, mid, min].map((value) => ({

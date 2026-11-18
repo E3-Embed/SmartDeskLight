@@ -1,13 +1,12 @@
-import { dbEnabled, initDb, insertSamples } from "../db";
 import { mockScenario, startMock } from "../mock";
-import { setSource, subscribe } from "../store";
+import { setSource } from "../store";
+import { TOPIC_CMD } from "../topics";
 import type { SourceKind } from "../types";
 import { startMqtt } from "./mqtt";
 import { startNetpie } from "./netpie";
 
 interface SourceGlobal {
   __sdlSourceStarted?: boolean;
-  __sdlDbWriterStarted?: boolean;
 }
 
 const globalRef = globalThis as unknown as SourceGlobal;
@@ -18,34 +17,12 @@ export function sourceKind(): SourceKind {
   return "mock";
 }
 
-function attachDbWriter(): void {
-  if (globalRef.__sdlDbWriterStarted || !dbEnabled) return;
-  globalRef.__sdlDbWriterStarted = true;
-
-  void initDb();
-
-  let buffer: Parameters<typeof insertSamples>[0] = [];
-  let flushing = false;
-
-  const flush = async () => {
-    if (flushing || buffer.length === 0) return;
-    flushing = true;
-    const rows = buffer;
-    buffer = [];
-    await insertSamples(rows);
-    flushing = false;
-  };
-
-  subscribe(({ sample }) => {
-    if (sample) buffer.push(sample);
-    if (buffer.length >= 60) void flush();
-  });
-
-  const timer = setInterval(() => void flush(), 5000);
-  timer.unref?.();
-}
-
-/** Starts the data source exactly once per server process. */
+/**
+ * Starts the data source exactly once per server process.
+ *
+ * History is read-only: EMQX writes `public.sdl_sensor_telemetry`, so the
+ * dashboard never attaches a database writer.
+ */
 export function ensureSource(): SourceKind {
   const kind = sourceKind();
   setSource(kind);
@@ -56,7 +33,6 @@ export function ensureSource(): SourceKind {
   else if (kind === "netpie") startNetpie();
   else startMock();
 
-  if (dbEnabled) attachDbWriter();
   return kind;
 }
 

@@ -1,14 +1,26 @@
 import { Pool } from "pg";
+import { NODE_ID } from "./topics";
 import type { Sample } from "./types";
 
+/**
+ * Read-only window into the table EMQX writes.
+ *
+ * The dashboard never writes history: the EMQX PostgreSQL connector owns
+ * `public.sdl_sensor_telemetry`. When the connection string is missing or the
+ * server cannot be reached, callers fall back to the in-memory ring buffer.
+ */
 const connectionString = process.env.DATABASE_URL;
 export const dbEnabled = Boolean(connectionString);
 
+/** Do not hammer an unreachable database on every chart refresh. */
+const RETRY_AFTER_MS = 30_000;
+const CONNECT_TIMEOUT_MS = 3_000;
+
 interface DbGlobal {
   __sdlPool?: Pool;
-  __sdlDbReady?: Promise<void>;
   __sdlDbFails?: number;
   __sdlDbLastError?: string | null;
+  __sdlDbRetryAt?: number;
 }
 
 const globalRef = globalThis as unknown as DbGlobal;
@@ -16,118 +28,92 @@ const globalRef = globalThis as unknown as DbGlobal;
 function pool(): Pool | null {
   if (!connectionString) return null;
   if (!globalRef.__sdlPool) {
-    globalRef.__sdlPool = new Pool({ connectionString, max: 3 });
-    globalRef.__sdlPool.on("error", (error) => {
+    const poolInstance = new Pool({
+      connectionString,
+      max: 2,
+      connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
+      idleTimeoutMillis: 10_000,
+      query_timeout: 5_000,
+      ssl:
+        process.env.DATABASE_SSL === "require"
+          ? { rejectUnauthorized: false }
+          : undefined,
+    });
+    poolInstance.on("error", (error) => {
       globalRef.__sdlDbLastError = error.message;
     });
+    globalRef.__sdlPool = poolInstance;
   }
   return globalRef.__sdlPool;
 }
 
-async function migrate(): Promise<void> {
-  const client = pool();
-  if (!client) return;
-  await client.query(`
-    CREATE TABLE IF NOT EXISTS samples (
-      ts         timestamptz NOT NULL,
-      lux        double precision NOT NULL,
-      cct        double precision NOT NULL,
-      target_lux double precision NOT NULL,
-      target_cct double precision NOT NULL,
-      pwm        smallint NOT NULL
-    );
-  `);
-  await client.query(
-    "CREATE INDEX IF NOT EXISTS samples_ts_idx ON samples (ts DESC);",
-  );
-  await client.query(
-    "DELETE FROM samples WHERE ts < now() - interval '7 days';",
-  );
+function fail(error: unknown): null {
+  globalRef.__sdlDbFails = (globalRef.__sdlDbFails ?? 0) + 1;
+  globalRef.__sdlDbLastError = error instanceof Error ? error.message : String(error);
+  globalRef.__sdlDbRetryAt = Date.now() + RETRY_AFTER_MS;
+  return null;
 }
 
-export function initDb(): Promise<void> {
-  if (!dbEnabled) return Promise.resolve();
-  if (!globalRef.__sdlDbReady) {
-    globalRef.__sdlDbReady = migrate().catch((error: unknown) => {
-      globalRef.__sdlDbFails = (globalRef.__sdlDbFails ?? 0) + 1;
-      globalRef.__sdlDbLastError =
-        error instanceof Error ? error.message : String(error);
-    });
-  }
-  return globalRef.__sdlDbReady;
+interface HistoryRow {
+  epoch_s: string | number;
+  lux: number | string | null;
+  cct: number | string | null;
 }
 
-export async function insertSamples(rows: Sample[]): Promise<boolean> {
-  const client = pool();
-  if (!client || rows.length === 0) return false;
-  try {
-    await client.query(
-      `INSERT INTO samples (ts, lux, cct, target_lux, target_cct, pwm)
-       SELECT * FROM unnest(
-         $1::timestamptz[],
-         $2::double precision[],
-         $3::double precision[],
-         $4::double precision[],
-         $5::double precision[],
-         $6::smallint[]
-       )`,
-      [
-        rows.map((row) => new Date(row.t)),
-        rows.map((row) => row.lux),
-        rows.map((row) => row.cct),
-        rows.map((row) => row.targetLux),
-        rows.map((row) => row.targetCct),
-        rows.map((row) => Math.round(row.pwm)),
-      ],
-    );
-    return true;
-  } catch (error) {
-    globalRef.__sdlDbFails = (globalRef.__sdlDbFails ?? 0) + 1;
-    globalRef.__sdlDbLastError =
-      error instanceof Error ? error.message : String(error);
-    return false;
-  }
-}
-
-export async function fetchSamples(sinceMs: number): Promise<Sample[] | null> {
+/**
+ * Reads `public.sdl_sensor_telemetry`. Rows carry lux/cct only, so the Sample
+ * targets stay undefined and the charts hide those lines.
+ */
+export async function fetchSamples(
+  sinceMs: number,
+  nodeId = NODE_ID,
+): Promise<Sample[] | null> {
   const client = pool();
   if (!client) return null;
+  if ((globalRef.__sdlDbRetryAt ?? 0) > Date.now()) return null;
+
   try {
-    const result = await client.query<{
-      ts: Date;
-      lux: number;
-      cct: number;
-      target_lux: number;
-      target_cct: number;
-      pwm: number;
-    }>(
-      `SELECT ts, lux, cct, target_lux, target_cct, pwm
-         FROM samples
-        WHERE ts >= to_timestamp($1 / 1000.0)
-        ORDER BY ts ASC
+    const result = await client.query<HistoryRow>(
+      `SELECT COALESCE(NULLIF(ts, 0), EXTRACT(EPOCH FROM arrived)::bigint) AS epoch_s,
+              lux,
+              cct
+         FROM public.sdl_sensor_telemetry
+        WHERE node_id = $1
+          AND lux IS NOT NULL
+          AND COALESCE(NULLIF(ts, 0), EXTRACT(EPOCH FROM arrived)::bigint) >= $2
+        ORDER BY epoch_s ASC
         LIMIT 20000`,
-      [sinceMs],
+      [nodeId, Math.floor(sinceMs / 1000)],
     );
-    return result.rows.map((row) => ({
-      t: row.ts.getTime(),
-      lux: Number(row.lux),
-      cct: Number(row.cct),
-      targetLux: Number(row.target_lux),
-      targetCct: Number(row.target_cct),
-      pwm: Number(row.pwm),
-    }));
+
+    const samples: Sample[] = [];
+    for (const row of result.rows) {
+      const t = Number(row.epoch_s) * 1000;
+      const lux = row.lux == null ? NaN : Number(row.lux);
+      if (!Number.isFinite(t) || !Number.isFinite(lux)) continue;
+      const rawCct = row.cct == null ? NaN : Number(row.cct);
+      samples.push({
+        t,
+        lux,
+        cct: Number.isFinite(rawCct) && rawCct > 0 ? rawCct : undefined,
+      });
+    }
+
+    globalRef.__sdlDbLastError = null;
+    globalRef.__sdlDbRetryAt = 0;
+    return samples;
   } catch (error) {
-    globalRef.__sdlDbFails = (globalRef.__sdlDbFails ?? 0) + 1;
-    globalRef.__sdlDbLastError =
-      error instanceof Error ? error.message : String(error);
-    return null;
+    return fail(error);
   }
 }
 
 export function dbStatus() {
+  const retryAt = globalRef.__sdlDbRetryAt ?? 0;
   return {
     enabled: dbEnabled,
+    available: dbEnabled && (globalRef.__sdlDbLastError ?? null) == null,
     fails: globalRef.__sdlDbFails ?? 0,
     lastError: globalRef.__sdlDbLastError ?? null,
+    retryInMs: Math.max(0, retryAt - Date.now()),
   };
 }
