@@ -1,0 +1,24 @@
+name: sdl-dashboard
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: sdl-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sdl
+      POSTGRES_PASSWORD: sdl
+      POSTGRES_DB: sdl
+      TZ: Asia/Bangkok
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - sdl-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sdl -d sdl"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  sdl-pgdata:
