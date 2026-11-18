@@ -1,7 +1,7 @@
 // ca_bundle.h — attach the ESP32's built-in Mozilla CA bundle to a WiFiClientSecure.
 //
 // The bundle is the public root store shipped with the Arduino core, so every
-// publicly-trusted endpoint we talk to (NETPIE on 8883, Google, Discord) verifies
+// publicly-trusted endpoint we talk to (EMQX on 8883, Google, Discord) verifies
 // against it with no PEM files, no fingerprint pinning and no setInsecure().
 //
 // One caveat: chain verification compares certificate validity dates with the

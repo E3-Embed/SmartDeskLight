@@ -17,10 +17,11 @@ struct Rgb {
 
 constexpr Rgb kOff{0, 0, 0};
 constexpr Rgb kGreen{0, 255, 0};      // cloud + fresh node data
-constexpr Rgb kAmber{255, 120, 0};    // Wi-Fi up, MQTT/TLS not connected
+constexpr Rgb kAmber{255, 200, 0};    // Wi-Fi up, MQTT/TLS not connected
 constexpr Rgb kRed{255, 0, 0};        // no Wi-Fi at all
 constexpr Rgb kBlue{0, 0, 255};       // safe state (stop button)
-constexpr Rgb kMagenta{200, 0, 200};  // cloud up, but no data from the sensor node
+constexpr Rgb kMagenta{200, 0, 200};  // node silent: no telemetry and no heartbeat
+constexpr Rgb kViolet{0, 0, 255};   // node alive, waiting for its first reading
 constexpr Rgb kCyan{0, 200, 200};     // waiting for NTP before TLS may start
 constexpr Rgb kWhite{255, 255, 255};  // boot / associating
 
@@ -51,6 +52,7 @@ enum class State : uint8_t {
   WaitNtp,
   WaitMqtt,
   NoNode,
+  NoReading,
   Ok,
   Safe,
 };
@@ -62,7 +64,8 @@ const char *stateName(State s) {
     case State::WifiFailed: return "no wi-fi (red blink)";
     case State::WaitNtp: return "waiting for NTP (cyan blink)";
     case State::WaitMqtt: return "waiting for MQTT (amber blink)";
-    case State::NoNode: return "cloud up, no node data (magenta blink)";
+    case State::NoNode: return "node silent (magenta blink)";
+    case State::NoReading: return "node alive, no sensor reading yet (violet pulse)";
     case State::Ok: return "online (green)";
     case State::Safe: return "SAFE (blue)";
   }
@@ -75,33 +78,43 @@ Rgb render(State s, uint32_t now) {
       const uint32_t t = now % 1000;
       return (t < 100 || (t >= 250 && t < 350)) ? kBlue : kOff;  // double blink
     }
-    case State::Associating: return scale(kWhite, pulse(2000));
+    case State::Associating: return scale(kWhite, pulse(5000));
     case State::WifiFailed: return blinking(400, 200) ? kRed : kOff;
     case State::WaitNtp: return blinking(1000, 500) ? kCyan : kOff;
     case State::WaitMqtt: return blinking(1000, 500) ? kAmber : kOff;
     case State::NoNode: return blinking(1500, 600) ? kMagenta : kOff;
+    case State::NoReading: return scale(kViolet, pulse(5000));
     case State::Ok: return kGreen;
     case State::Boot: break;
   }
   return kOff;
 }
 
-// True once the primary node has reported recently enough to close the control loop.
-// Mirrors control::snapshot(): a node that never reported is not fresh either.
-bool primaryNodeFresh(uint32_t now) {
+// Two separate questions about the primary node:
+//   readings: has telemetry arrived recently enough to close the control loop?
+//   alive:    are health heartbeats still arriving?
+// updateNodeSys() deliberately does not refresh lastSeenMs, so a node that is connected but
+// has no sensor driver yet is alive and not fresh — that difference is the violet state.
+struct NodeHealth {
+  bool readings;
+  bool alive;
+};
+
+NodeHealth primaryNodeHealth(uint32_t now) {
   for (const auto &n : app::state.nodes) {
     if (n.used && n.id == cfg::kPrimaryNodeId) {
-      return now - n.lastSeenMs < cfg::kNodeStaleMs;
+      return {now - n.lastSeenMs < cfg::kNodeStaleMs,
+              n.sysSeen && now - n.lastSysMs < cfg::kNodeStaleMs};
     }
   }
-  return false;
+  return {false, false};
 }
 
 }  // namespace
 
 void begin() {
   pixel.begin();
-  pixel.setBrightness(1);  // the devkit LED is bright enough to be annoying at night
+  pixel.setBrightness(2);  // the devkit LED is bright enough to be annoying at night
   // Boot flash: proves the LED itself works even if the network never comes up.
   show(kWhite);
   delay(200);
@@ -116,14 +129,15 @@ void task(void *) {
   Serial.println("[led] boot");
 
   for (;;) {
-    bool safe, cloudUp, nodeFresh, wifiTried;
+    bool safe, cloudUp, wifiTried;
+    NodeHealth node;
     uint32_t now;
     {
       app::StateLock lock;
       safe = app::state.lamp.safe;
       cloudUp = app::state.cloudUp;
       now = millis();
-      nodeFresh = primaryNodeFresh(now);
+      node = primaryNodeHealth(now);
     }
     const EventBits_t bits = xEventGroupGetBits(app::events);
     const bool wifiUp = (bits & app::kBitWifiUp) != 0;
@@ -148,8 +162,8 @@ void task(void *) {
         s = State::WaitNtp;
       } else if (!cloudUp) {
         s = State::WaitMqtt;
-      } else if (!nodeFresh) {
-        s = State::NoNode;
+      } else if (!node.readings) {
+        s = node.alive ? State::NoReading : State::NoNode;
       } else {
         s = State::Ok;
       }
