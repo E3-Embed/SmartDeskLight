@@ -54,8 +54,8 @@ constexpr uint8_t kFirstSimulatedId = 101;
 
 // ---------------------------------------------------------------- identity
 // One name for the network and the broker: DHCP hostname, MQTT client id, and the
-// "device" field in telemetry. NETPIE2020 pins the MQTT client id to the device key in
-// the console, so the device's Client ID there must match this exactly.
+// "device" field in telemetry. The NETPIE mirror does not use it: NETPIE2020 requires the
+// device's own Client ID (a UUID from the console), which lives in secrets.h.
 // Rules: <= 32 chars, letters/digits/hyphen only, no spaces.
 constexpr const char *kDeviceName = "sdl-gateway";
 
@@ -100,5 +100,19 @@ constexpr const char *kTopicStatus = "@msg/sdl/gateway/status";
 // transition and refreshed every kPresencePeriodMs so "ts" stays usable as an age check.
 constexpr const char *kTopicSensorStatus = "@msg/sdl/sensor/status";
 constexpr uint32_t kPresencePeriodMs = 30000;
+
+// ---------------------------------------------------------------- NETPIE2020 mirror
+// Optional second session, on when NETPIE_CLIENT_ID is set in secrets.h. EMQX stays the main
+// broker; NETPIE gets the same state snapshot in the gateway device's shadow (what the
+// dashboard's NETPIE source and the Feed graphs read), the alerts, and it delivers dashboard
+// commands sent to @msg/sdl/cmd. Shadow writes, not every 2 s message, to stay in the free quota.
+constexpr const char *kNetpieHost = "mqtt.netpie.io";
+constexpr uint16_t kNetpiePort = 8883;  // publicly-trusted chain: same CA bundle check as EMQX
+constexpr const char *kNetpieTopicShadow = "@shadow/data/update";
+constexpr uint32_t kNetpieShadowPeriodMs = 30000;  // ~86k writes/month; the free quota is 500k
+// A failed NETPIE handshake blocks CloudTask for up to the TLS timeout, so back off hard
+// rather than stall EMQX every few seconds while NETPIE is unreachable.
+constexpr uint32_t kNetpieRetryMinMs = 15000;
+constexpr uint32_t kNetpieRetryMaxMs = 5UL * 60UL * 1000UL;
 
 }  // namespace cfg

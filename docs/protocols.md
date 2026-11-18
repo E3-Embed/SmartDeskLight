@@ -41,7 +41,7 @@ struct แบบ packed นิยามไว้ใน [`firmware/common/message
 | `@msg/sdl/gw/telemetry` | เกตเวย์ → คลาวด์ | สถานะเกตเวย์ (Wi-Fi, MQTT, NTP, heap, uptime, reset reason) ทุก 2 วินาที |
 | `@msg/sdl/sensor/telemetry` | เกตเวย์ → คลาวด์ | ข้อมูลของโหนดเซนเซอร์หนึ่งชุด — heartbeat ทุก 2 วินาที และค่าที่วัดได้เมื่อไดรเวอร์เสร็จ; `node_id` ระบุว่าเป็นโหนดไหน |
 | `@msg/sdl/gw/state` | เกตเวย์ → คลาวด์ | snapshot ล่าสุดของทุกโหนดและสถานะโคม สำหรับ Dashboard (ทุก 30 วินาที) |
-| `@msg/sdl/cmd` | แดชบอร์ด → เกตเวย์ | โหมดกิจกรรม หรือ feedback จากผู้ใช้ |
+| `@msg/sdl/cmd` | แดชบอร์ด → เกตเวย์ | `{"mode":…}` โหมดกิจกรรม, `{"feedback":"too_bright"\|"too_dim"}`, `{"ai":"refresh"}` ขอโปรไฟล์ AI ใหม่, `{"safe":1}` เข้าสถานะปลอดภัย (ออกได้ด้วยปุ่มหยุดที่โคมเท่านั้น) |
 | `@msg/sdl/alert` | เกตเวย์ → คลาวด์ | ข้อความแจ้งเตือน (ส่งเข้า Discord ด้วย) |
 | `@msg/sdl/gateway/status` | เกตเวย์ → คลาวด์ | `"online"` / `"offline"` แบบ **retained** — ตัวเกตเวย์ประกาศ `online` ตอนเชื่อมต่อ และ broker ประกาศ `offline` แทนผ่าน MQTT Last Will เมื่อขาดการเชื่อมต่อเกิน keepalive (30 วินาที) |
 | `@msg/sdl/sensor/status` | เกตเวย์ → คลาวด์ | presence ของโหนดแบบ **retained**: `{"ts":…,"N1":"online","N2":"offline"}` — เกตเวย์เขียนแทนโหนดเพราะโหนดไม่มี MQTT session ของตัวเอง |
@@ -77,6 +77,18 @@ snapshot บน `@msg/sdl/gw/state`:
  "n1_sys_age_s":0,"dist_mm":550,"presence":1,"lamp_mW":3120,"filters":[1,0,0],
  "pwm":180,"mode":"reading"}
 ```
+
+## เกตเวย์ ↔ NETPIE2020 · MQTTS (พอร์ต 8883, ไม่บังคับ)
+
+เปิดเมื่อใส่ `NETPIE_CLIENT_ID` / `NETPIE_TOKEN` / `NETPIE_SECRET` ของ device `gateway` ใน `secrets.h` เป็น session ที่สอง แยกจาก EMQX (ล้มเหลวแล้วไม่กระทบ EMQX):
+
+| Topic บน NETPIE | ทิศทาง | ข้อมูล |
+|---|---|---|
+| `@shadow/data/update` | เกตเวย์ → shadow ของ `gateway` ทุก 30 วินาที | `{"data":{…}}` ฟิลด์แบนชุดเดียวกับ `@msg/sdl/gw/state`; ฟิลด์ที่อยู่ใน schema (`n1_lux, n1_cct, lamp_mW, pwm, target_lux, dist_mm, presence, buffered`) ถูกเก็บลง Feed |
+| `@msg/sdl/alert` | เกตเวย์ → กลุ่ม `sdl-group` | ข้อความแจ้งเตือนชุดเดียวกับบน EMQX |
+| `@msg/sdl/cmd` | แดชบอร์ด → เกตเวย์ | คำสั่งรูปแบบเดียวกับบน EMQX (REST: `PUT /device/message?topic=sdl/cmd`) |
+
+แดชบอร์ดอ่าน shadow ของเกตเวย์ได้ด้วย device `dashboard` ที่อยู่กลุ่มเดียวกัน: `GET https://api.netpie.io/v2/device/shadow/data?alias=gateway` (`Authorization: Device <ClientID>:<Token>`) — `@shadow/data/updated` ที่ subscribe จะได้เฉพาะ shadow ของตัวเอง ไม่ใช่ของเกตเวย์
 
 ## เกตเวย์ ↔ AI · HTTPS
 

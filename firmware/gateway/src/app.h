@@ -82,7 +82,9 @@ struct State {
 };
 
 // ---- messages between tasks
-enum class EventType : uint8_t { StopButton, SetMode, Feedback, NewProfile };
+// EnterSafe comes from the dashboard: it can only *enter* the safe state; leaving it still
+// takes the physical stop button at the desk.
+enum class EventType : uint8_t { StopButton, SetMode, Feedback, NewProfile, EnterSafe };
 struct ControlEvent {
   EventType type;
   Mode mode;        // SetMode

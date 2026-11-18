@@ -64,6 +64,19 @@ void handleEvent(const app::ControlEvent &ev) {
       }
       break;
     }
+    case app::EventType::EnterSafe: {
+      bool wasSafe;
+      {
+        app::StateLock lock;
+        wasSafe = app::state.lamp.safe;
+        app::state.lamp.safe = true;
+      }
+      if (!wasSafe) {
+        lamp::enterSafeState();
+        app::raiseAlert("Safe state requested from the dashboard: press the stop button to resume");
+      }
+      break;
+    }
     case app::EventType::SetMode: {
       app::StateLock lock;
       app::state.mode = ev.mode;

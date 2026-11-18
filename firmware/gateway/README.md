@@ -72,25 +72,27 @@ AI เสนอแค่ `target_lux`, `target_cct` และชุดฟิล�
 
 ## การตั้งค่า
 
-1. **บรอคเกอร์ MQTT:** โปรเจกต์ใช้ EMQX ที่รันเอง (`infra/docker-compose.yml`) มี NPMplus เป็นตัว terminate TLS ที่พอร์ต 8883 ตั้ง host ใน `cfg::kMqttHost` (`src/config.h`) และใส่ username / password ของ device ใน `include/secrets.h` (คัดลอกจาก `secrets.example.h`) — ตัวแปรยังใช้ชื่อ `NETPIE_TOKEN` / `NETPIE_SECRET` ตามของเดิม ส่วน client id คือ `cfg::kDeviceName` (`sdl-gateway`)
-2. **ตรวจใบรับรอง (E5):** NPMplus ออกใบรับรองด้วย ACME ซึ่งต่อลูกโซ่ถึง root สาธารณะที่มีอยู่ใน CA bundle ที่ฝังมากับ Arduino core เฟิร์มแวร์จึงเรียก `ca::useBuiltin()` ไม่ต้องมีไฟล์ PEM หรือ pin fingerprint ตรวจเองได้ด้วย
+1. **บรอคเกอร์ MQTT:** โปรเจกต์ใช้ EMQX ที่รันเอง (`infra/docker-compose.yml`) มี NPMplus เป็นตัว terminate TLS ที่พอร์ต 8883 ตั้ง host ใน `cfg::kMqttHost` (`src/config.h`) และใส่ username / password ของ device ใน `MQTT_USERNAME` / `MQTT_PASSWORD` ของ `include/secrets.h` (คัดลอกจาก `secrets.example.h`) ส่วน client id คือ `cfg::kDeviceName` (`sdl-gateway`) — `secrets.h` แบบเก่าที่เก็บ login ของ EMQX ไว้ใน `NETPIE_TOKEN` / `NETPIE_SECRET` ยังบิลด์ได้ ตราบใดที่ไม่มี `NETPIE_CLIENT_ID`
+2. **NETPIE2020 (ไม่บังคับ):** ใส่ `NETPIE_CLIENT_ID` / `NETPIE_TOKEN` / `NETPIE_SECRET` ของ device `gateway` (project SmartDeskLight, group `sdl-group`) เพื่อเปิด session ที่สองไป `mqtt.netpie.io:8883` — เกตเวย์จะเขียน snapshot ชุดเดียวกับ `@msg/sdl/gw/state` ลง shadow ของ device ทุก 30 วินาที (`@shadow/data/update` → Feed เก็บ 8 ฟิลด์เป็นกราฟ), ส่งการแจ้งเตือนไป `@msg/sdl/alert` และรับคำสั่งจาก `@msg/sdl/cmd` ของแดชบอร์ดฝั่ง NETPIE ด้วย เว้น `NETPIE_CLIENT_ID` ว่าง = ปิด ใช้ EMQX อย่างเดียว ถ้าต่อ NETPIE ไม่ได้จะลองใหม่แบบเว้นช่วง 15 วินาทีถึง 5 นาที และไม่กระทบลิงก์ EMQX
+   ที่ใช้ shadow ทุก 30 วินาที (ไม่ใช่ทุก 2 วินาทีแบบ EMQX) เพราะอยู่ในโควตาฟรีของ NETPIE (~86k ครั้ง/เดือน จาก 500k)
+3. **ตรวจใบรับรอง (E5):** NPMplus ออกใบรับรองด้วย ACME ซึ่งต่อลูกโซ่ถึง root สาธารณะที่มีอยู่ใน CA bundle ที่ฝังมากับ Arduino core เฟิร์มแวร์จึงเรียก `ca::useBuiltin()` ไม่ต้องมีไฟล์ PEM หรือ pin fingerprint ตรวจเองได้ด้วย
    `openssl s_client -connect gw.embed.rachatat.com:8883 -servername gw.embed.rachatat.com </dev/null | openssl x509 -noout -issuer`
    การตรวจลูกโซ่ใช้เวลาระบบเทียบวันหมดอายุ เกตเวย์จึงรอ NTP ซิงก์สำเร็จก่อนเปิด TLS ทุกครั้ง (ถ้าไม่สำเร็จใน 60 วินาทีจะตั้ง SNTP ใหม่)
-3. **AI:** ใส่ Gemini API key ใน `LLM_API_KEY` (เว้นว่าง = ใช้โปรไฟล์ตามกฎอย่างเดียว) ชื่อโมเดลอยู่ที่ `cfg::kAiModel`
-4. **Discord:** สร้าง webhook ของช่องแชตแล้วใส่ URL ใน `DISCORD_WEBHOOK`
-5. **โหนดเซนเซอร์:** ไม่ต้องตั้ง MAC หรือช่อง Wi-Fi ของเกตเวย์ล่วงหน้า โหนดจะ broadcast heartbeat ไล่ช่อง 1–13 หาเกตเวย์ เรียนรู้ MAC จาก ACK แล้วสลับเป็น unicast และสแกนใหม่เองถ้าเงียบเกิน 15 วินาที (รายละเอียดใน `docs/protocols.md`)
-6. บิลด์และแฟลช: `pio run -d firmware/gateway -t upload && pio device monitor -d firmware/gateway`
+4. **AI:** ใส่ Gemini API key ใน `LLM_API_KEY` (เว้นว่าง = ใช้โปรไฟล์ตามกฎอย่างเดียว) ชื่อโมเดลอยู่ที่ `cfg::kAiModel`
+5. **Discord:** สร้าง webhook ของช่องแชตแล้วใส่ URL ใน `DISCORD_WEBHOOK`
+6. **โหนดเซนเซอร์:** ไม่ต้องตั้ง MAC หรือช่อง Wi-Fi ของเกตเวย์ล่วงหน้า โหนดจะ broadcast heartbeat ไล่ช่อง 1–13 หาเกตเวย์ เรียนรู้ MAC จาก ACK แล้วสลับเป็น unicast และสแกนใหม่เองถ้าเงียบเกิน 15 วินาที (รายละเอียดใน `docs/protocols.md`)
+7. บิลด์และแฟลช: `pio run -d firmware/gateway -t upload && pio device monitor -d firmware/gateway`
 
-**หมายเหตุ TLS:** ทุกปลายทาง (EMQX 8883, Gemini, Discord) ตรวจใบรับรองด้วย CA bundle ที่ฝังมากับ ESP32 ไม่มีการเรียก `setInsecure()` ในบิลด์ปกติ สำหรับการดีบักบนเครื่องตัวเองเท่านั้นที่บิลด์ด้วย `-DALLOW_INSECURE_TLS` เพื่อข้ามการตรวจ — ห้ามใช้ในการเดโม
+**หมายเหตุ TLS:** ทุกปลายทาง (EMQX 8883, NETPIE 8883, Gemini, Discord) ตรวจใบรับรองด้วย CA bundle ที่ฝังมากับ ESP32 ไม่มีการเรียก `setInsecure()` ในบิลด์ปกติ สำหรับการดีบักบนเครื่องตัวเองเท่านั้นที่บิลด์ด้วย `-DALLOW_INSECURE_TLS` เพื่อข้ามการตรวจ — ห้ามใช้ในการเดโม
 
 ### Topic ของ MQTT
 
 | Topic | ทิศทาง | ข้อมูล |
 |---|---|---|
-| `@msg/sdl/gw/telemetry` | เกตเวย์ → คลาวด์ ทุก 2 วินาที | สถานะเกตเวย์: `uptime_s, wifi_up, wifi_code, rssi, wifi_ch, ip, wifi_retries, mqtt_fails, ntp, time, heap, heap_min, temp_c, reset, nodes, mode, safe, pwm, buffered, dropped` |
+| `@msg/sdl/gw/telemetry` | เกตเวย์ → คลาวด์ ทุก 2 วินาที | สถานะเกตเวย์: `uptime_s, wifi_up, wifi_code, rssi, wifi_ch, ip, wifi_retries, mqtt_fails, netpie_up, netpie_fails, ntp, time, heap, heap_min, temp_c, reset, nodes, mode, safe, pwm, buffered, dropped` |
 | `@msg/sdl/sensor/telemetry` | เกตเวย์ → คลาวด์ ทุก heartbeat (2 วินาที) และทุกชุดค่าที่อ่านได้ | heartbeat: `node_id, seq, ts, node_ms, uptime_s, heap, heap_min, wifi_ch, reset, temp_c, tx_acked, tx_attempts`; เมื่อไดรเวอร์เซนเซอร์เสร็จจะเพิ่ม `lux, r, g, b, c, cct` โดย `node_id` (`N1`, `N2`, …) บอกว่าเป็นโหนดไหน |
 | `@msg/sdl/gw/state` | เกตเวย์ → คลาวด์ ทุก 30 วินาที | snapshot ล่าสุดของทุกอย่าง: `n1_lux, n1_cct, n1_up_s, n1_heap, n1_temp_c, n1_sys_age_s, n1_rx, n1_seq, dist_mm, presence, lamp_mW, diffuser, nd, warm, pwm, safe, mode, target_lux, ai, buffered, dropped, heap, uptime_s, device` |
-| `@msg/sdl/cmd` | แดชบอร์ด → เกตเวย์ | `{"mode":"coding"}` หรือ `{"feedback":"too_bright"}` / `"too_dim"` |
+| `@msg/sdl/cmd` | แดชบอร์ด → เกตเวย์ (ทั้งจาก EMQX และ NETPIE) | `{"mode":"reading"\|"coding"\|"drawing"}`, `{"feedback":"too_bright"\|"too_dim"}`, `{"ai":"refresh"}` (ขอโปรไฟล์ AI ใหม่ทันที) หรือ `{"safe":1}` (เข้าสถานะปลอดภัย — สั่งจากเว็บได้แค่**เข้า** การออกต้องกดปุ่มหยุดที่โคม) |
 | `@msg/sdl/alert` | เกตเวย์ → คลาวด์ | ข้อความแจ้งเตือน (ส่งเข้า Discord ด้วย) |
 | `@msg/sdl/gateway/status` | เกตเวย์ → คลาวด์ (retained) | `"online"` / `"offline"` — `online` ส่งตอนเชื่อมต่อสำเร็จ ส่วน `offline` เป็น MQTT Last Will ที่ broker ส่งแทนเมื่อเกตเวย์ขาดการเชื่อมต่อเกิน keepalive 30 วินาที แดชบอร์ดจึงรู้สถานะลิงก์ทันทีที่ subscribe |
 | `@msg/sdl/sensor/status` | เกตเวย์ → คลาวด์ (retained) | presence ของโหนด: `{"ts":…,"N1":"online"}` — เขียนแทนโหนดที่ไม่มี MQTT session; `online` เมื่อมี heartbeat/ค่าที่วัดได้ภายใน 10 วินาที, `offline` เมื่อเงียบกว่านั้น; เขียนซ้ำเมื่อเปลี่ยน, ตอนเชื่อมต่อใหม่ และทุก 30 วินาที |
