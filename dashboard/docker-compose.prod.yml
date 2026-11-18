@@ -1,6 +1,9 @@
 name: sdl-dashboard-prod
 
 # Production on the same host as Postgres/EMQX:
+#   docker compose -f docker-compose.prod.yml pull && \
+#   docker compose -f docker-compose.prod.yml up -d
+# or build on the host from a checkout:
 #   docker compose -f docker-compose.prod.yml up -d --build
 # DATABASE_URL in .env.local can then use 127.0.0.1:5433 — no need to expose
 # Postgres to the internet at all.
@@ -8,8 +11,10 @@ name: sdl-dashboard-prod
 
 services:
   dashboard:
+    # Published by .github/workflows/dashboard-image.yml on every push to main.
+    # `up -d` pulls this tag; `--build` rebuilds locally instead.
+    image: ghcr.io/e3-embed/smartdesklight-dashboard:latest
     build: .
-    image: sdl-dashboard
     container_name: sdl-dashboard
     restart: unless-stopped
     env_file:

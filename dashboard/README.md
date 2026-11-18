@@ -129,13 +129,27 @@ DATABASE_URL=postgres://iot:<password>@85.211.247.199.nip.io:5433/iot
 
 ### Deploy ด้วย Docker (รันบนเซิร์ฟเวอร์เดียวกับ DB)
 
+GitHub Actions จะ build image และ push ขึ้น GHCR อัตโนมัติทุกครั้งที่ merge เข้า `main`
+(`.github/workflows/dashboard-image.yml`; PR จะ build อย่างเดียว ไม่ push)
+
+| tag | ใช้ตอนไหน |
+|---|---|
+| `ghcr.io/e3-embed/smartdesklight-dashboard:latest` | ล่าสุดบน `main` |
+| `ghcr.io/e3-embed/smartdesklight-dashboard:sha-<short>` | ผูกกับ commit ใช้ rollback |
+
 ```bash
 cd dashboard
 cp .env.example .env.local      # เติม credential
-docker compose -f docker-compose.prod.yml up -d --build
+docker login ghcr.io -u <github-user>   # เฉพาะตอน package ยังเป็น private
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 # เปิด http://127.0.0.1:3000 (bind localhost) แล้ววาง nginx/Caddy ทำ HTTPS ข้างหน้า
 ```
 
+- build เองบนเซิร์ฟเวอร์ได้ด้วย `docker compose -f docker-compose.prod.yml up -d --build`
+- ครั้งแรกที่ push ขึ้น GHCR package จะเป็น **private** — เปิด GitHub → Packages →
+  `smartdesklight-dashboard` → Package settings → Change visibility เป็น public
+  ถ้าไม่อยากให้เซิร์ฟเวอร์ต้อง login
 - ใช้ `DATABASE_URL=postgres://sdl_dashboard:...@127.0.0.1:5433/iot` — ไม่ต้องเปิด Postgres ออกอินเทอร์เน็ต
 - เปิด Basic auth ได้ด้วย `DASHBOARD_USER` / `DASHBOARD_PASSWORD` ใน `.env.local` (ว่าง = ปิด)
 - `output: "standalone"` ถูกตั้งไว้แล้ว จึงใช้ image เล็ก (ไม่มี node_modules ใน layer สุดท้าย)
