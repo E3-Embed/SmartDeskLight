@@ -62,7 +62,7 @@ browser ──SSE /api/stream──▶ Next server ◀── MQTTS 8883 ──�
 - `lib/topics.ts` — topic map ชุดเดียวกับ `firmware/gateway/src/config.h`
 - `lib/derive.ts` — ค่าที่คำนวณได้ (error %, tolerance, state machine, packet success)
 - `lib/source/mqtt.ts` — bridge MQTT ตัวเดียว (subscribe `@msg/sdl/#`)
-- `lib/db.ts` — อ่าน `public.sdl_sensor_telemetry` เท่านั้น ไม่มี writer
+- `lib/db.ts` — อ่าน `sdl_sensor_telemetry` + `sdl_gw_state` เท่านั้น ไม่มี writer
 - `lib/mock.ts` — ตัวจำลองวงควบคุม, presence, feedback, alert และ scenario ต่าง ๆ
 
 ### State ที่แดชบอร์ดแยกแยะ
@@ -107,15 +107,16 @@ browser ──SSE /api/stream──▶ Next server ◀── MQTTS 8883 ──�
 ### ประวัติใน Postgres (อ่านอย่างเดียว)
 
 แดชบอร์ด **ไม่เขียน** DB เอง — EMQX PostgreSQL connector เป็นเจ้าของตาราง
-`public.sdl_sensor_telemetry` (คอลัมน์ `msgid, qos, arrived, node_id, seq, ts, node_ms, lux, r, g, b, c, cct`)
+`public.sdl_sensor_telemetry` (lux/cct/RGB) และ `public.sdl_gw_state` (target/PWM)
 
 ```bash
 # ใน .env.local
-DATABASE_URL=postgres://iot:<password>@85.211.247.199.nip.io:5555/iot
+DATABASE_URL=postgres://iot:<password>@85.211.247.199.nip.io:5433/iot
 ```
 
-- `/api/history?range=30m|2h` อ่านตารางนี้ (index ที่แนะนำ: `(node_id, ts DESC)`)
-- ตารางมีแค่ `lux`/`cct` → กราฟย้อนหลังจึงไม่มีเส้นเป้าหมาย/PWM (ช่วง 5 นาทีใช้ข้อมูลสดจึงมีครบ)
+- `/api/history?range=30m|2h` อ่าน `sdl_sensor_telemetry` (lux/cct) แล้ว merge กับ `sdl_gw_state`
+  (target_lux / target_cct / pwm, ใช้เวลา `arrived`) → กราฟย้อนหลังมีเส้นเป้าหมายและ PWM ครบ
+- ตารางอื่นที่ EMQX เขียน: `sdl_gw_telemetry`, `sdl_sensor_health`, `sdl_sensor_status`
 - ถ้า DB ต่อไม่ได้ แดชบอร์ดยังทำงานด้วย ring buffer 2 ชั่วโมง และขึ้นป้าย “memory · DB ไม่ตอบสนอง” บนกราฟ
 
 ## คำสั่งที่ใช้บ่อย
@@ -135,7 +136,7 @@ DATABASE_URL=postgres://iot:<password>@85.211.247.199.nip.io:5555/iot
 | `code 5 Not authorized` | ACL ไม่ผ่าน | เพิ่มสิทธิ์ตามตารางข้างบน |
 | TLS error `Hostname/IP does not match certificate` | ต่อด้วย IP หรือ `*.nip.io` แต่ cert ออกให้ `*.embed.rachatat.com` | ใช้ `MQTT_URL=mqtts://gw.embed.rachatat.com:8883` |
 | ต่อติดแต่การ์ดว่าง | ยังไม่ถึงรอบ `gw/state` (~10 วิ) หรือ gateway ออฟไลน์ | ดู `@msg/sdl/gw/status` และ `/api/health` |
-| กราฟ 30 นาที/2 ชั่วโมงว่าง + ป้าย memory | ต่อ Postgres ไม่ได้ | ตรวจ `DATABASE_URL` / firewall ของพอร์ต 5555 (ดู `db.lastError` ใน `/api/health`) |
+| กราฟ 30 นาที/2 ชั่วโมงว่าง + ป้าย memory | ต่อ Postgres ไม่ได้ | ตรวจ `DATABASE_URL` / firewall ของพอร์ต 5433 (ดู `db.lastError` ใน `/api/health`) |
 | `wss://…/mqtt` ตอบ 502 | proxy WebSocket ยังไม่เปิด | ไม่ต้องใช้ — แดชบอร์ดต่อ TCP 8883 ฝั่ง server |
 | เปิด 2 แท็บแล้วหลุด | clientId ซ้ำ (เฉพาะกรณีต่อ MQTT จาก browser) | โปรเจกต์นี้ใช้ bridge ตัวเดียว จึงไม่เกิด |
 
