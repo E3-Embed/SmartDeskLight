@@ -96,7 +96,7 @@ struct TelemetryRecord {
 };
 
 // A node health heartbeat plus the gateway's wall clock when it arrived. Not buffered while
-// offline: a 2 s heartbeat has no value once it is minutes old, and the 30 s state snapshot
+// offline: a 2 s heartbeat has no value once it is minutes old, and the 10 s state snapshot
 // already carries the latest health values.
 struct NodeSysRecord {
   SdlSysStatus pkt;

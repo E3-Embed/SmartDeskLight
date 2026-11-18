@@ -191,4 +191,6 @@ bool read(SensorSample &out) {
 }
 
 bool lightSensorPresent() { return bh1750_present; }
+
+bool colorSensorPresent() { return tcs_present; }
 }  // namespace sensors

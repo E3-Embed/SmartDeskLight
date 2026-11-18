@@ -164,6 +164,24 @@ static bool sendAndWait(const uint8_t *dst, const void *pkt, size_t len, uint32_
   return false;  // TODO: count for the packet-delivery-rate metric (tests/README.md)
 }
 
+// One glanceable line: identity, link, and what the sensors are doing. Printed on its own
+// cadence so a monitor opened after boot still shows the state without a reset.
+static void printStatus(uint32_t now) {
+  Serial.printf("[status] node=%u mac=%s up=%lus link=%s", nodecfg::kNodeId,
+                WiFi.macAddress().c_str(), static_cast<unsigned long>(now / 1000),
+                gLinked ? "linked" : "searching");
+  if (gLinked) {
+    Serial.printf(" ch=%u gw=%02X:%02X:%02X:%02X:%02X:%02X", gLinkChannel, gGatewayMac[0],
+                  gGatewayMac[1], gGatewayMac[2], gGatewayMac[3], gGatewayMac[4],
+                  gGatewayMac[5]);
+  }
+  Serial.printf(" bh1750=%u tcs=%u tx=%lu/%lu misses=%lu\n",
+                sensors::lightSensorPresent() ? 1 : 0, sensors::colorSensorPresent() ? 1 : 0,
+                static_cast<unsigned long>(gTxAttempts),
+                static_cast<unsigned long>(gTxAcked),
+                static_cast<unsigned long>(gSensorMisses));
+}
+
 // Broadcast the heartbeat on each channel until the gateway answers. The ACK identifies the
 // gateway's MAC (needed for unicast) and the channel the ACK came in on.
 static bool linkUp() {
@@ -234,8 +252,7 @@ void loop() {
   // Report independently of the gateway, including after USB serial reconnects.
   if (now - gLastPresenceReportMs >= kPresenceReportPeriodMs) {
     gLastPresenceReportMs = now;
-    Serial.printf("[diag] node=%u uptime=%lus link=%s\n", nodecfg::kNodeId,
-                  static_cast<unsigned long>(now / 1000), gLinked ? "linked" : "searching");
+    printStatus(now);
     sensors::reportPresence();
   }
 

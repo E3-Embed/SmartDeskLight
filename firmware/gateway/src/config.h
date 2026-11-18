@@ -82,22 +82,32 @@ constexpr uint16_t kMqttPort = 8883;  // NPMplus terminates TLS; EMQX itself lis
 constexpr uint32_t kStatePeriodMs = 10000;        // full snapshot on @msg/sdl/gw/state
 constexpr uint32_t kGwTelemetryPeriodMs = 2000;   // gateway health on @msg/sdl/gw/telemetry (matches the node heartbeat)
 // MQTT PINGREQ interval. The broker declares us dead after 1.5x this, which is also how
-// long the retained Last Will on @msg/sdl/gateway/status takes to flip to "offline".
+// long the retained Last Will on @msg/sdl/gw/status takes to flip to "offline".
 constexpr uint16_t kMqttKeepAliveSec = 30;
 constexpr uint32_t kAiPeriodMs = 5UL * 60UL * 1000UL;
 constexpr int kBufferSlots = 300;        // store-and-forward: ~5 min of 1 Hz readings (~11 kB)
 constexpr const char *kAiModel = "gemini-3.5-flash-lite";  // ~2 s per request; 2.5 models are closed to new users
 constexpr long kUtcOffsetSec = 7L * 3600L;  // Asia/Bangkok
+// Canonical MQTT topic standard:
+//   data topics    @msg/sdl/<source>/<kind>   source = gw | sensor
+//   cross-cutting  @msg/sdl/cmd, @msg/sdl/alert
+//   kinds          telemetry = measured data (sensor readings, gateway health)
+//                  health    = node board health (heartbeat, no sensor readings)
+//                  state     = aggregated snapshot
+//                  status    = retained link / presence state
+// Only gw/status and sensor/status are retained.
 constexpr const char *kTopicCmd = "@msg/sdl/cmd";
 constexpr const char *kTopicAlert = "@msg/sdl/alert";
-// One topic per source. Sensor nodes have no Wi-Fi stack of their own, so the gateway
-// republishes on their behalf and node_id says which one it was.
+// Sensor nodes have no Wi-Fi stack of their own, so the gateway republishes on their
+// behalf and node_id says which one it was. Readings and heartbeats stay on separate
+// topics so a subscriber gets one payload shape per topic.
 constexpr const char *kTopicGwTelemetry = "@msg/sdl/gw/telemetry";
-constexpr const char *kTopicSensorTelemetry = "@msg/sdl/sensor/telemetry";
+constexpr const char *kTopicSensorTelemetry = "@msg/sdl/sensor/telemetry";  // lux, r, g, b, c, cct
+constexpr const char *kTopicSensorHealth = "@msg/sdl/sensor/health";        // uptime, heap, reset, tx
 constexpr const char *kTopicState = "@msg/sdl/gw/state";
 // Retained "online"/"offline", driven by the MQTT Last Will, so any dashboard that
 // subscribes late still learns the current link state immediately.
-constexpr const char *kTopicStatus = "@msg/sdl/gateway/status";
+constexpr const char *kTopicStatus = "@msg/sdl/gw/status";
 // Retained presence map for the sensor nodes, maintained by the gateway because they have no
 // MQTT session of their own: {"ts":...,"N1":"online","N2":"offline"}. Republished on every
 // transition and refreshed every kPresencePeriodMs so "ts" stays usable as an age check.

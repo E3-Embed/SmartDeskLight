@@ -155,8 +155,8 @@ bool publishReading(const app::TelemetryRecord &rec) {
 
   char payload[256];
   size_t n = serializeJson(doc, payload, sizeof(payload));
-  // One sensor topic for every node; node_id in the payload separates them, so a dashboard
-  // subscribes once instead of once per node.
+  // One readings topic for every node; node_id in the payload separates them, so a
+  // dashboard subscribes once instead of once per node.
   return mqtt.publish(cfg::kTopicSensorTelemetry, reinterpret_cast<const uint8_t *>(payload), n);
 }
 
@@ -271,10 +271,10 @@ void publishGatewayTelemetry() {
   }
 }
 
-// Sensor-node health, republished for the node that has no Wi-Fi stack of its own. Health
-// keys only: lux/cct appear here once the BH1750/TCS34725 drivers start sending telemetry,
-// so a zero never gets mistaken for a dark room.
-void publishNodeTelemetry(const app::NodeSysRecord &rec) {
+// Sensor-node board health, republished for the node that has no Wi-Fi stack of its own.
+// This topic carries health keys only; measured values are on @msg/sdl/sensor/telemetry,
+// so a consumer never has to guess whether a payload is a reading or a heartbeat.
+void publishNodeHealth(const app::NodeSysRecord &rec) {
   JsonDocument doc;
   char nodeName[8];
   snprintf(nodeName, sizeof(nodeName), "N%u", rec.pkt.node_id);
@@ -293,8 +293,8 @@ void publishNodeTelemetry(const app::NodeSysRecord &rec) {
 
   char payload[320];
   size_t n = serializeJson(doc, payload, sizeof(payload));
-  if (!mqtt.publish(cfg::kTopicSensorTelemetry, reinterpret_cast<const uint8_t *>(payload), n)) {
-    Serial.println("[cloud] node telemetry publish failed");
+  if (!mqtt.publish(cfg::kTopicSensorHealth, reinterpret_cast<const uint8_t *>(payload), n)) {
+    Serial.println("[cloud] node health publish failed");
   }
 }
 
@@ -477,16 +477,16 @@ void task(void *) {
     }
     if (mqttUp && !backlog.empty()) flushBacklog(10);  // a few per pass, keep MQTT responsive
 
-    // Node heartbeats: publish the freshest ones and drop the rest. If MQTT is down the
-    // queued ones are stale by the time it returns, and @msg/sdl/gw/state carries the latest
-    // health values anyway.
+    // Node heartbeats: publish the freshest ones on @msg/sdl/sensor/health and drop the rest.
+    // If MQTT is down the queued ones are stale by the time it returns, and
+    // @msg/sdl/gw/state carries the latest health values anyway.
     app::NodeSysRecord srec;
     while (xQueueReceive(app::qCloudSys, &srec, 0) == pdTRUE) {
-      if (mqttUp) publishNodeTelemetry(srec);
+      if (mqttUp) publishNodeHealth(srec);
     }
 
-    // Node presence, retained on sdl/sensor/status: republish on any transition, after a
-    // reconnect, and periodically so "ts" stays fresh.
+    // Node presence, retained on @msg/sdl/sensor/status: republish on any transition,
+    // after a reconnect, and periodically so "ts" stays fresh.
     if (mqttUp) {
       const uint32_t sig = presenceSignature();
       if (presenceDue || sig != lastPresenceSig ||

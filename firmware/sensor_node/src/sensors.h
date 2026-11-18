@@ -34,4 +34,7 @@ bool read(SensorSample &out);
 // True after the latest presence probe/read saw BH1750. A valid dark reading can be 0 lx.
 bool lightSensorPresent();
 
+// True after the latest presence probe/read saw TCS34725.
+bool colorSensorPresent();
+
 }  // namespace sensors
