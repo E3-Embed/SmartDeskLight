@@ -85,8 +85,6 @@ export function ConnectionBadge({
       <span className="font-medium">{label}</span>
       {state?.source === "mock" ? (
         <span className="opacity-70">· mock</span>
-      ) : state?.source === "netpie" ? (
-        <span className="opacity-70">· NETPIE</span>
       ) : null}
     </span>
   );
@@ -496,7 +494,7 @@ export function MetricsDock({
       <div className="flex shrink-0 items-center gap-2 border-l border-line px-3">
         <span className={`chip ${state?.source === "mock" ? "chip-mock" : "chip-ok"}`}>
           <Dot tone={state?.source === "mock" ? "warn" : "ok"} pulse={false} />
-          {state?.source === "netpie" ? "NETPIE" : state?.source === "mqtt" ? "MQTT" : "MOCK"}
+          {state?.source === "mqtt" ? "MQTT" : "MOCK"}
         </span>
         <button
           type="button"

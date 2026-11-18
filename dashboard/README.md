@@ -28,7 +28,6 @@ pnpm dev          # http://localhost:3000
   `studio` Studio Warm · `graphite` Warm Graphite · `nordic` Nordic Daylight · `blueprint` Blueprint Slate
 - **รูปแบบ 2 แบบ** (`?layout=`): `a` Operator (3 คอลัมน์ + alert ขวา) · `b` Focus (โคมซ้าย กราฟใหญ่ขวา)
 - **มุมการ์ด**: ปุ่มสี่เหลี่ยมบน header สลับ **มุมโค้ง ↔ มุมคม** (`?corners=sharp`) — ใช้กับงานนำเสนอสายเทคนิค
-- **ธีม NETPIE**: `SOURCE=netpie` ใช้ MQTT `mqtt.netpie.io:8883` (อ่าน `@shadow/data/updated` + poll shadow ทุก 15 วิ) และ publish คำสั่งผ่าน REST `sdl/cmd`; ประวัติกราฟดึงจาก Feed API ผ่าน `NETPIE_FEED_METRIC`
 - **ฟอนต์**: Space Grotesk (ตัวเลข/หัวข้ออังกฤษ) · Anuphan (ไทย) · JetBrains Mono (หน่วย/ค่าเล็ก)
 - วัดจริงแล้วไม่มี scroll ที่ 1280×720 และ 1440×900 ทั้งสอง layout
 
@@ -76,7 +75,7 @@ browser ──SSE /api/stream──▶ Next server ◀── MQTTS 8883 ──�
 
 | ตัวแปร | ค่าเริ่มต้น | ใช้ทำอะไร |
 |---|---|---|
-| `SOURCE` | `mock` | `mock`, `mqtt` หรือ `netpie` (ของเก่า) |
+| `SOURCE` | `mock` | `mock` หรือ `mqtt` |
 | `MQTT_URL` | `mqtts://gw.embed.rachatat.com:8883` | broker ของทีม — ใช้ชื่อนี้เพราะใบรับรองครอบ `*.embed.rachatat.com` |
 | `MQTT_CLIENT_ID` | `sdl-dashboard` | ต้องไม่ชนกับ `sdl-gateway` |
 | `MQTT_USERNAME` / `MQTT_PASSWORD` | — | credential ของ device `dashboard` |
@@ -128,6 +127,22 @@ DATABASE_URL=postgres://iot:<password>@85.211.247.199.nip.io:5433/iot
 | `pnpm lint` · `pnpm typecheck` · `pnpm test` | ตรวจคุณภาพ + unit test |
 | `pnpm probe` | ทดสอบ broker + สิทธิ์ topic |
 
+### Deploy ด้วย Docker (รันบนเซิร์ฟเวอร์เดียวกับ DB)
+
+```bash
+cd dashboard
+cp .env.example .env.local      # เติม credential
+docker compose -f docker-compose.prod.yml up -d --build
+# เปิด http://127.0.0.1:3000 (bind localhost) แล้ววาง nginx/Caddy ทำ HTTPS ข้างหน้า
+```
+
+- ใช้ `DATABASE_URL=postgres://sdl_dashboard:...@127.0.0.1:5433/iot` — ไม่ต้องเปิด Postgres ออกอินเทอร์เน็ต
+- เปิด Basic auth ได้ด้วย `DASHBOARD_USER` / `DASHBOARD_PASSWORD` ใน `.env.local` (ว่าง = ปิด)
+- `output: "standalone"` ถูกตั้งไว้แล้ว จึงใช้ image เล็ก (ไม่มี node_modules ใน layer สุดท้าย)
+
+รัน standalone บนเครื่องตรง ๆ (ไม่ใช้ Docker): `pnpm build && pnpm start:standalone`
+— ต้องมี `--env-file` เพราะ server เปลี่ยน cwd ไปที่ `.next/standalone` จึงไม่เจอ `.env.local` เอง
+
 ## แก้ปัญหาที่เจอบ่อย
 
 | อาการ | สาเหตุ | ทางแก้ |
@@ -148,16 +163,8 @@ DATABASE_URL=postgres://iot:<password>@85.211.247.199.nip.io:5433/iot
 - `sensor/status` บอกแค่ว่าโหนดยังมีชีวิต ไม่ได้แปลว่ามีค่า lux ใหม่ — ต้องดู `n1_age_s` ใน `gw/state` อีกชั้น
 - ประวัติ alert เริ่มนับจากตอนที่ bridge เชื่อมต่อ (topic ไม่ retained)
 - ค่ากำลังไฟ (Wh) ไม่ได้สะสมยอดในหน้านี้ — ดูค่ากำลังไฟ instantaneous เท่านั้น
-- retained message เก่าที่ `@msg/sdl/status` และ `@msg/sdl/gateway/status` (“offline”) ยังค้างใน EMQX
-  แดชบอร์ดไม่สนใจแล้ว แต่ควรลบใน EMQX Dashboard → MQTT → Retained
+- retained message เก่าที่ `@msg/sdl/status` และ `@msg/sdl/gateway/status` ถูกล้างแล้ว (18 พ.ย. 2026)
 
-## ภาคผนวก: การตั้งค่า NETPIE2020 (ของเดิม)
-
-- **Project / Group:** `SmartDeskLight` / `sdl-group`
-- **Device:** `gateway` สำหรับเฟิร์มแวร์เกตเวย์ (Client ID, Token และ Secret ใส่ใน `secrets.h`) และ `dashboard` สำหรับฝั่งแดชบอร์ดที่ส่งคำสั่ง
-- **ฟิลด์ใน Shadow ต่อโหนด:** `n1_lux`, `n1_cct`, `n2_lux`, ... และ `dist_mm`, `presence`, `lamp_mW`, `diffuser`, `nd`, `warm`, `pwm`, `mode`
-- **Feed:** เปิด datatag ของฟิลด์ใน Shadow — ตอนนี้เปิดไว้ 8 ฟิลด์: `n1_lux`, `n1_cct`, `lamp_mW`, `pwm`, `target_lux`, `dist_mm`, `presence`, `buffered`
-- **Trigger:** Device Status Changed → Event Hook (แจ้งเตือนเมื่อเกตเวย์ออฟไลน์)
 ## ภาคผนวก: topic map ที่แดชบอร์ดใช้จริง
 
 ตรวจสดด้วย `pnpm probe` (ณ 18 พ.ย. 2026 broker ตอบครบทั้ง 6 topic)

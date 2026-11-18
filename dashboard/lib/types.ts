@@ -2,7 +2,7 @@ export type Mode = "reading" | "coding" | "drawing";
 
 export type LinkState = "connecting" | "online" | "offline" | "error";
 
-export type SourceKind = "mock" | "mqtt" | "netpie";
+export type SourceKind = "mock" | "mqtt";
 
 /**
  * One row of the timeseries the charts draw. `t` is epoch milliseconds.
