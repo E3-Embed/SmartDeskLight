@@ -204,10 +204,12 @@ export function Dashboard() {
   const derived = useMemo(() => derive(state ?? EMPTY_STATE, now), [state, now]);
 
   const chartSamples = useMemo(() => {
-    if (rangeId === "5m") return samples.slice(-360);
+    // 5 min merges the Postgres tail with the live buffer too, so a new tab
+    // (or a moment while the node is silent) still shows the last readings.
     const base = history ?? [];
     const lastBase = base.length > 0 ? base[base.length - 1].t : 0;
-    return [...base, ...samples.filter((sample) => sample.t > lastBase)];
+    const merged = [...base, ...samples.filter((sample) => sample.t > lastBase)];
+    return rangeId === "5m" ? merged.slice(-360) : merged;
   }, [samples, history, rangeId]);
 
   const range = rangeById(rangeId);

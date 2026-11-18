@@ -1,3 +1,4 @@
+import { dbEnabled, warmDb } from "../db";
 import { mockScenario, startMock } from "../mock";
 import { setSource } from "../store";
 import { TOPIC_CMD } from "../topics";
@@ -32,6 +33,8 @@ export function ensureSource(): SourceKind {
   if (kind === "mqtt") startMqtt();
   else if (kind === "netpie") startNetpie();
   else startMock();
+
+  if (dbEnabled) warmDb();
 
   return kind;
 }

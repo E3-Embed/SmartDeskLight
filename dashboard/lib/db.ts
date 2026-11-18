@@ -210,6 +210,19 @@ export async function fetchSamples(
   }
 }
 
+/**
+ * Opens the first pooled connection in the background so the first chart
+ * request does not pay for it (and cannot trip the query timeout).
+ */
+export function warmDb(): void {
+  const client = pool();
+  if (!client) return;
+  if ((globalRef.__sdlDbOkAt ?? 0) > 0) return;
+  void client.query("SELECT 1").catch(() => {
+    // a real failure is reported by the first fetchSamples call
+  });
+}
+
 export function dbStatus() {
   const retryAt = globalRef.__sdlDbRetryAt ?? 0;
   const lastError = globalRef.__sdlDbLastError ?? null;

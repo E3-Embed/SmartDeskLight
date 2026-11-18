@@ -366,6 +366,12 @@ export function CctPanel({ samples, now, range, derived, className = "" }: Panel
 
   const targetPoints = visible
     .filter((sample) => typeof sample.targetCct === "number")
+    // A target far outside the visible Kelvin window would be clamped onto the
+    // axis edge and read as if it were real data, so skip those points.
+    .filter((sample) => {
+      const target = sample.targetCct as number;
+      return target >= min && target <= max;
+    })
     .map((sample) => ({
       x: clamp(((sample.t - start) / range.ms) * 100, 0, 100),
       y: toY(sample.targetCct as number),
