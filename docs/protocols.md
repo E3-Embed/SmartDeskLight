@@ -47,6 +47,9 @@ topic ของข้อมูลใช้รูปแบบเดียวก�
 | `@msg/sdl/sensor/telemetry` | เกตเวย์ → คลาวด์ | **ค่าที่วัดได้** ของโหนดหนึ่งชุด: `lux, r, g, b, c, cct`; `node_id` ระบุว่าเป็นโหนดไหน |
 | `@msg/sdl/sensor/health` | เกตเวย์ → คลาวด์ | **heartbeat/สุขภาพบอร์ด** ของโหนด ทุก 2 วินาที: `uptime_s, heap, reset, temp_c, tx_*` — ไม่มีค่าที่วัดได้ปนมา |
 | `@msg/sdl/gw/state` | เกตเวย์ → คลาวด์ | snapshot ล่าสุดของทุกโหนดและสถานะโคม สำหรับ Dashboard (ทุก 10 วินาที) |
+| `@msg/sdl/gw/state` | เกตเวย์ → คลาวด์ | snapshot ล่าสุดของทุกโหนดและสถานะโคม สำหรับ Dashboard (ทุก ~10 วินาที) — มีฟิลด์ `ts` (epoch วินาที, 0 จนกว่า NTP จะ sync) |
+| `@msg/sdl/sensor/telemetry` | เกตเวย์ → คลาวด์ | ค่าที่วัดได้ของโหนด (`lux, r, g, b, c, cct`), `node_id` บอกว่าโหนดไหน; ส่งเฉพาะเมื่อ BH1750 อ่านสำเร็จ |
+| `@msg/sdl/sensor/health` | เกตเวย์ → คลาวด์ | heartbeat/สุขภาพบอร์ดของโหนด (`uptime_s, heap, temp_c, reset, tx_acked, tx_attempts`) ทุก 2 วินาที |
 | `@msg/sdl/cmd` | แดชบอร์ด → เกตเวย์ | โหมดกิจกรรม หรือ feedback จากผู้ใช้ |
 | `@msg/sdl/alert` | เกตเวย์ → คลาวด์ | ข้อความแจ้งเตือน (ส่งเข้า Discord ด้วย) |
 | `@msg/sdl/gw/status` | เกตเวย์ → คลาวด์ | `"online"` / `"offline"` แบบ **retained** — ตัวเกตเวย์ประกาศ `online` ตอนเชื่อมต่อ และ broker ประกาศ `offline` แทนผ่าน MQTT Last Will เมื่อขาดการเชื่อมต่อเกิน keepalive (30 วินาที) |
@@ -64,7 +67,7 @@ topic ทั้งหมดเป็น topic MQTT ธรรมดาบน EMQX
 > [!NOTE]
 > **การย้ายชื่อ topic:** เดิมสถานะเกตเวย์อยู่ที่ `@msg/sdl/gateway/status` ตอนนี้ใช้ `@msg/sdl/gw/status` ให้ตรงกับกลุ่ม `gw/*` — หลังแฟลชเฟิร์มแวร์ใหม่แล้ว ให้ลบ retained message เก่าที่ `@msg/sdl/gateway/status` ใน EMQX Dashboard (MQTT → Retained) เพื่อไม่ให้ค้างอยู่ใน broker
 
-heartbeat ของโหนดอยู่บน `@msg/sdl/sensor/health` (ค่าสุขภาพของบอร์ด):
+heartbeat ของโหนดบน `@msg/sdl/sensor/health` (ค่าสุขภาพของบอร์ด):
 
 ```json
 {"node_id":"N1","seq":42,"ts":1730300000,"node_ms":41200,"uptime_s":41,
@@ -85,10 +88,14 @@ TCS34725 ที่ 100.8 ms / gain 16x และเป็น 0 ทั้งห�
 snapshot บน `@msg/sdl/gw/state`:
 
 ```json
-{"device":"sdl-gateway","n1_lux":412.5,"n1_cct":4300,"n1_up_s":41,"n1_heap":233472,
- "n1_sys_age_s":0,"dist_mm":550,"presence":1,"lamp_mW":3120,"filters":[1,0,0],
- "pwm":180,"mode":"reading"}
+{"device":"sdl-gateway","ts":1795003828,"n1_lux":412.5,"n1_cct":4300,"n1_up_s":41,
+ "n1_heap":233472,"n1_sys_age_s":0,"dist_mm":550,"presence":1,"lamp_mW":3120,
+ "diffuser":1,"nd":0,"warm":0,"pwm":180,"safe":0,"mode":"reading",
+ "target_lux":500,"target_cct":4000,"ai":0,"buffered":0,"dropped":0,
+ "heap":182296,"uptime_s":1541}
 ```
+
+`ts` เป็น epoch วินาทีของเกตเวย์ (0 จนกว่า NTP จะ sync) — ใช้จัดลำดับ/คำนวณอายุข้อมูลได้
 
 ## เกตเวย์ ↔ AI · HTTPS
 

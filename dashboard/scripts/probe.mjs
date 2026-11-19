@@ -1,13 +1,15 @@
-// Quick broker probe: node --env-file=.env.local scripts/probe.mjs
-// Connects with the dashboard device credentials, subscribes to the topics the
-// gateway publishes, and reports which ones answer. Never prints the password.
+// Quick broker probe: node --env-file-if-exists=.env.local scripts/probe.mjs
+// Connects with the dashboard credentials, subscribes to `@msg/sdl/#`, and
+// reports which topics answered. Never prints the password.
 import mqtt from "mqtt";
 
-const url = process.env.MQTT_URL ?? "mqtts://gw.embed.rachatat.com:8883";
+const url = process.env.MQTT_URL ?? "mqtts://85.211.247.199.nip.io:8883";
 const username = process.env.MQTT_USERNAME;
 const password = process.env.MQTT_PASSWORD;
 const clientId = process.env.MQTT_CLIENT_ID ?? "sdl-probe";
 const prefix = process.env.MQTT_TOPIC_PREFIX ?? "@msg/sdl";
+const nodeId = process.env.SDL_NODE_ID ?? "N1";
+const waitMs = Number(process.env.PROBE_MS ?? 12_000);
 
 if (!username || !password) {
   console.error(
@@ -23,75 +25,71 @@ if (!username || !password) {
   process.exit(1);
 }
 
-const topics = [
-  "@shadow/data/update",
-  `${prefix}/sys`,
-  `${prefix}/status`,
-  `${prefix}/alert`,
-  `${prefix}/+/telemetry`,
+const expected = [
+  `${prefix}/gw/status`,
+  `${prefix}/sensor/status`,
+  `${prefix}/gw/telemetry`,
+  `${prefix}/sensor/telemetry`,
+  `${prefix}/sensor/health`,
+  `${prefix}/gw/state`,
 ];
 
 const seen = new Map();
+
 const client = mqtt.connect(url, {
   clientId,
   username,
   password,
-  keepalive: 30,
-  connectTimeout: 10_000,
+  keepalive: 20,
+  clean: true,
   reconnectPeriod: 0,
-  rejectUnauthorized: true,
+  connectTimeout: 8000,
+  rejectUnauthorized: process.env.MQTT_TLS_INSECURE !== "1",
 });
 
-const timeout = setTimeout(() => {
-  finish("หมดเวลา 40 วินาที");
-}, 40_000);
-
-function finish(reason) {
-  clearTimeout(timeout);
-  console.log(`\nสรุป (${reason})`);
-  for (const topic of topics) {
-    const payload = seen.get(topic);
-    if (!payload) {
-      console.log(`  ✗ ${topic}  ไม่ได้รับข้อมูล`);
-      continue;
-    }
-    const preview = payload.length > 220 ? `${payload.slice(0, 220)}…` : payload;
-    console.log(`  ✓ ${topic}\n      ${preview}`);
-  }
-  client.end(true, () => process.exit(0));
-}
-
 client.on("connect", () => {
-  console.log(`connected: ${url} as ${username} (clientId ${clientId})`);
-  client.subscribe(topics, { qos: 1 }, (error, granted) => {
+  client.subscribe(`${prefix}/#`, { qos: 1 }, (error) => {
     if (error) {
-      console.error("subscribe ล้มเหลว:", error.message);
-      finish("subscribe error");
-      return;
+      console.error("subscribe ไม่สำเร็จ:", error.message);
+      process.exit(1);
     }
-    for (const grant of granted) {
-      console.log(`  subscribed qos${grant.qos} ${grant.topic}`);
-    }
-    console.log("รอข้อมูลสูงสุด 40 วินาที (shadow ทุก 30 วิ, sys ทุก 10 วิ)…");
   });
 });
 
 client.on("message", (topic, payload) => {
-  const text = payload.toString();
-  const key = topics.includes(topic) ? topic : `${prefix}/+/telemetry`;
-  if (!seen.has(key)) {
-    seen.set(key, text);
-    if (seen.size === topics.length) finish("ได้ครบทุก topic");
-  }
+  if (seen.has(topic)) return;
+  seen.set(topic, {
+    at: new Date().toISOString().slice(11, 19),
+    preview: payload.toString().replace(/\s+/g, " ").slice(0, 120),
+  });
 });
 
 client.on("error", (error) => {
   console.error("MQTT error:", error.message);
-  if (/Not authorized/i.test(error.message)) {
-    console.error("→ ตรวจ ACL: subscribe @shadow/data/update และ @msg/sdl/#");
-  }
-  if (/Bad username or password/i.test(error.message)) {
-    console.error("→ ตรวจ MQTT_USERNAME / MQTT_PASSWORD ใน .env.local");
-  }
-  finish("connection error");
 });
+
+client.on("close", () => {
+  // a clean exit follows; an early close is reported by the timeout below
+});
+
+const timer = setTimeout(() => {
+  console.log(`\nbroker ${url} · node ${nodeId} · ${waitMs / 1000}s window\n`);
+  let missing = 0;
+  for (const topic of expected) {
+    const hit = seen.get(topic);
+    if (hit) console.log(`✓ ${topic}  ${hit.at}  ${hit.preview}`);
+    else {
+      missing += 1;
+      console.log(`✗ ${topic}  — ไม่มีข้อความ`);
+    }
+  }
+
+  const extra = [...seen.keys()].filter((topic) => !expected.includes(topic));
+  if (extra.length > 0) {
+    console.log("\ntopic อื่นที่ได้รับ:");
+    for (const topic of extra) console.log(`  · ${topic}  ${seen.get(topic).preview}`);
+  }
+
+  client.end(true);
+  process.exit(missing === 0 ? 0 : 1);
+}, waitMs);

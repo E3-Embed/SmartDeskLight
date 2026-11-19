@@ -4,11 +4,16 @@ import {
   seedSamples,
   setLink,
   setScenario,
-  telemetryTopic,
-  TOPIC_SHADOW,
-  TOPIC_STATUS,
-  TOPIC_SYS,
 } from "./store";
+import {
+  NODE_ID,
+  TOPIC_GATEWAY_STATE,
+  TOPIC_GATEWAY_STATUS,
+  TOPIC_GATEWAY_TELEMETRY,
+  TOPIC_SENSOR_HEALTH,
+  TOPIC_SENSOR_STATUS,
+  TOPIC_SENSOR_TELEMETRY,
+} from "./topics";
 import type { MockScenario, Mode, Sample } from "./types";
 
 interface Sim {
@@ -30,8 +35,10 @@ interface Sim {
   powerMw: number;
   tick: number;
   dirty: boolean;
-  lastSysAt: number;
-  lastShadowAt: number;
+  lastGatewayAt: number;
+  lastStateAt: number;
+  lastHealthAt: number;
+  lastStatusAt: number;
   rng: () => number;
   alertsSent: Set<string>;
 }
@@ -97,8 +104,10 @@ function newSim(): Sim {
     powerMw: 2700,
     tick: 0,
     dirty: true,
-    lastSysAt: 0,
-    lastShadowAt: 0,
+    lastGatewayAt: 0,
+    lastStateAt: 0,
+    lastHealthAt: 0,
+    lastStatusAt: 0,
     rng: mulberry32(20261116),
     alertsSent: new Set(),
   };
@@ -108,37 +117,40 @@ function noise(sim: Sim, amplitude: number): number {
   return (sim.rng() - 0.5) * 2 * amplitude;
 }
 
-function shadowPayload(sim: Sim) {
+function statePayload(sim: Sim) {
   return JSON.stringify({
-    data: {
-      n1_lux: Number((sim.lux + noise(sim, 1.5)).toFixed(1)),
-      n1_cct: Math.round(sim.cct),
-      n1_age_s: sim.scenario === "fault" ? Math.round(30 + sim.tick) : 0,
-      n1_rx: sim.rx,
-      n1_seq: sim.seq,
-      dist_mm: sim.presence ? Math.round(530 + noise(sim, 35)) : 0,
-      presence: sim.presence ? 1 : 0,
-      lamp_mW: Math.round(sim.powerMw),
-      bus_V: Number((5.02 + noise(sim, 0.03)).toFixed(2)),
-      current_mA: Math.round(sim.powerMw / 5.02),
-      diffuser: sim.filters[0] ? 1 : 0,
-      nd: sim.filters[1] ? 1 : 0,
-      warm: sim.filters[2] ? 1 : 0,
-      pwm: Math.round(sim.pwm),
-      safe: sim.safe ? 1 : 0,
-      mode: sim.mode,
-      target_lux: Math.round(sim.targetLux),
-      target_cct: Math.round(sim.targetCct),
-      ai: 1,
-      buffered: sim.buffered,
-      dropped: sim.dropped,
-      heap: 168_400 - (sim.tick % 40) * 120,
-      uptime_s: sim.uptime,
-    },
+    device: "sdl-gateway",
+    n1_lux: Number((sim.lux + noise(sim, 1.5)).toFixed(1)),
+    n1_cct: Math.round(sim.cct),
+    n1_age_s: sim.scenario === "fault" ? Math.round(30 + sim.tick) : 0,
+    n1_rx: sim.rx,
+    n1_seq: sim.seq,
+    n1_up_s: sim.uptime,
+    n1_heap: 280_320,
+    n1_temp_c: 43.7,
+    n1_sys_age_s: sim.scenario === "fault" ? 30 : 1,
+    dist_mm: sim.presence ? Math.round(530 + noise(sim, 35)) : 0,
+    presence: sim.presence ? 1 : 0,
+    lamp_mW: Math.round(sim.powerMw),
+    bus_V: Number((5.02 + noise(sim, 0.03)).toFixed(2)),
+    current_mA: Math.round(sim.powerMw / 5.02),
+    diffuser: sim.filters[0] ? 1 : 0,
+    nd: sim.filters[1] ? 1 : 0,
+    warm: sim.filters[2] ? 1 : 0,
+    pwm: Math.round(sim.pwm),
+    safe: sim.safe ? 1 : 0,
+    mode: sim.mode,
+    target_lux: Math.round(sim.targetLux),
+    target_cct: Math.round(sim.targetCct),
+    ai: 1,
+    buffered: sim.buffered,
+    dropped: sim.dropped,
+    heap: 168_400 - (sim.tick % 40) * 120,
+    uptime_s: sim.uptime,
   });
 }
 
-function sysPayload(sim: Sim, reset = "poweron") {
+function gatewayPayload(sim: Sim, reset = "poweron") {
   return JSON.stringify({
     device: "sdl-gateway",
     uptime_s: sim.uptime,
@@ -147,7 +159,6 @@ function sysPayload(sim: Sim, reset = "poweron") {
     rssi: Math.round(-54 + noise(sim, 6)),
     wifi_ch: 6,
     ip: "192.168.1.42",
-    wifi_retries: 1,
     mqtt_fails: sim.scenario === "offline" ? 4 : 0,
     ntp: 1,
     time: Math.floor(Date.now() / 1000),
@@ -164,12 +175,12 @@ function sysPayload(sim: Sim, reset = "poweron") {
   });
 }
 
-function telemetryPayload(sim: Sim) {
+function sensorPayload(sim: Sim) {
   return JSON.stringify({
-    node_id: "N1",
+    node_id: NODE_ID,
     seq: sim.seq,
     ts: Math.floor(Date.now() / 1000),
-    node_ms: sim.uptime,
+    node_ms: sim.uptime * 1000,
     lux: Number(sim.lux.toFixed(1)),
     r: 40212,
     g: 39680,
@@ -179,21 +190,59 @@ function telemetryPayload(sim: Sim) {
   });
 }
 
+function healthPayload(sim: Sim) {
+  return JSON.stringify({
+    node_id: NODE_ID,
+    seq: sim.seq,
+    ts: Math.floor(Date.now() / 1000),
+    node_ms: sim.uptime * 1000,
+    uptime_s: sim.uptime,
+    heap: 280_320,
+    heap_min: 279_588,
+    wifi_ch: 1,
+    reset: "poweron",
+    temp_c: 43.7,
+    tx_acked: sim.rx,
+    tx_attempts: sim.seq,
+  });
+}
+
+function statusPayload(sim: Sim) {
+  return JSON.stringify({
+    ts: Math.floor(Date.now() / 1000),
+    [NODE_ID]: sim.scenario === "fault" ? "offline" : "online",
+  });
+}
+
 function once(sim: Sim, key: string, text: string) {
   if (sim.alertsSent.has(key)) return;
   sim.alertsSent.add(key);
   raiseAlert(text);
 }
 
-function publishShadow(sim: Sim) {
-  applyMessage(TOPIC_SHADOW, shadowPayload(sim));
-  sim.lastShadowAt = Date.now();
+function publishState(sim: Sim) {
+  applyMessage(TOPIC_GATEWAY_STATE, statePayload(sim));
+  sim.lastStateAt = Date.now();
   sim.dirty = false;
 }
 
-function publishSys(sim: Sim, reset = "poweron") {
-  applyMessage(TOPIC_SYS, sysPayload(sim, reset));
-  sim.lastSysAt = Date.now();
+function publishGateway(sim: Sim, reset = "poweron") {
+  applyMessage(TOPIC_GATEWAY_TELEMETRY, gatewayPayload(sim, reset));
+  sim.lastGatewayAt = Date.now();
+}
+
+function publishTelemetry(sim: Sim) {
+  applyMessage(TOPIC_SENSOR_TELEMETRY, sensorPayload(sim));
+}
+
+function publishHealth(sim: Sim) {
+  applyMessage(TOPIC_SENSOR_HEALTH, healthPayload(sim));
+  sim.lastHealthAt = Date.now();
+}
+
+function publishStatus(sim: Sim) {
+  applyMessage(TOPIC_SENSOR_STATUS, statusPayload(sim));
+  sim.lastStatusAt = Date.now();
 }
 
 function advance(sim: Sim) {
@@ -247,12 +296,14 @@ function loop() {
   advance(sim);
 
   if (sim.scenario !== "fault") {
-    applyMessage(telemetryTopic("N1"), telemetryPayload(sim));
+    publishTelemetry(sim);
   }
 
   const now = Date.now();
-  if (sim.dirty || now - sim.lastShadowAt >= 30_000) publishShadow(sim);
-  if (now - sim.lastSysAt >= 10_000) publishSys(sim);
+  if (sim.dirty || now - sim.lastStateAt >= 10_000) publishState(sim);
+  if (now - sim.lastGatewayAt >= 2_000) publishGateway(sim);
+  if (now - sim.lastHealthAt >= 2_000) publishHealth(sim);
+  if (now - sim.lastStatusAt >= 30_000) publishStatus(sim);
 
   if (sim.scenario === "fault") {
     once(
@@ -304,9 +355,12 @@ export function startMock(): void {
 
   seedHistory(sim);
   setLink("online");
-  applyMessage(TOPIC_STATUS, "online");
-  publishShadow(sim);
-  publishSys(sim);
+  applyMessage(TOPIC_GATEWAY_STATUS, "online");
+  publishState(sim);
+  publishGateway(sim);
+  publishTelemetry(sim);
+  publishHealth(sim);
+  publishStatus(sim);
   setScenario(sim.scenario);
 
   globalRef.__sdlMockTimer = setInterval(loop, 1000);
@@ -322,13 +376,13 @@ export function setMockScenario(next: MockScenario): void {
 
   if (previous === "offline" && next !== "offline") {
     setLink("online");
-    applyMessage(TOPIC_STATUS, "online");
+    applyMessage(TOPIC_GATEWAY_STATUS, "online");
     sim.buffered = 0;
     raiseAlert("เชื่อมต่อคลาวด์กลับมาแล้ว: ส่งข้อมูลที่ค้างอยู่ครบ");
   }
   if (next === "offline") {
     setLink("offline", "จำลอง: gateway ขาดการเชื่อมต่อ");
-    applyMessage(TOPIC_STATUS, "offline");
+    applyMessage(TOPIC_GATEWAY_STATUS, "offline");
   }
   if (next === "fault") {
     sim.alertsSent.delete("fault");
@@ -357,11 +411,11 @@ export function setMockScenario(next: MockScenario): void {
     sim.filters = profile.filters;
     sim.alertsSent.clear();
     raiseAlert("Gateway รีสตาร์ท (panic) — uptime กลับเป็น 0");
-    publishSys(sim, "panic");
+    publishGateway(sim, "panic");
     sim.scenario = "normal";
     setScenario("normal");
     sim.dirty = true;
-    publishShadow(sim);
+    publishState(sim);
     return;
   }
   if (next === "normal") {
@@ -375,8 +429,8 @@ export function setMockScenario(next: MockScenario): void {
     sim.lux = Math.max(40, sim.lux);
   }
   sim.dirty = true;
-  publishShadow(sim);
-  publishSys(sim);
+  publishState(sim);
+  publishGateway(sim);
 }
 
 export function mockScenario(): MockScenario {
@@ -403,7 +457,7 @@ export function mockCommand(command: { mode?: Mode; feedback?: "too_bright" | "t
   }
 
   sim.dirty = true;
-  publishShadow(sim);
-  publishSys(sim);
+  publishState(sim);
+  publishGateway(sim);
   return true;
 }

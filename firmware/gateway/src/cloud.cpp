@@ -167,6 +167,9 @@ void publishState() {
   JsonDocument doc;
   JsonObject d = doc.to<JsonObject>();
   d["device"] = cfg::kDeviceName;
+  // Gateway clock (epoch seconds) so history can be placed on a trusted axis;
+  // 0 until NTP has landed.
+  d["ts"] = app::nowEpoch();
   {
     app::StateLock lock;
     const auto &s = app::state;

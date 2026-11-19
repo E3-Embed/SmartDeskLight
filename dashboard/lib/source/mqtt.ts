@@ -1,10 +1,6 @@
 import mqtt, { type MqttClient } from "mqtt";
-import {
-  applyMessage,
-  setLink,
-  TOPIC_PREFIX,
-  TOPIC_SHADOW,
-} from "../store";
+import { applyMessage, setLink } from "../store";
+import { TOPIC_CMD, TOPIC_WILDCARD } from "../topics";
 
 interface MqttGlobal {
   __sdlMqttClient?: MqttClient;
@@ -17,7 +13,7 @@ export function startMqtt(): void {
   if (globalRef.__sdlMqttStarted) return;
   globalRef.__sdlMqttStarted = true;
 
-  const url = process.env.MQTT_URL ?? "mqtts://gw.embed.rachatat.com:8883";
+  const url = process.env.MQTT_URL ?? "mqtts://85.211.247.199.nip.io:8883";
   const username = process.env.MQTT_USERNAME;
   const password = process.env.MQTT_PASSWORD;
   const clientId = process.env.MQTT_CLIENT_ID ?? "sdl-dashboard";
@@ -37,19 +33,17 @@ export function startMqtt(): void {
     clean: true,
     reconnectPeriod: 3000,
     connectTimeout: 8000,
-    rejectUnauthorized: true,
+    // The broker uses a Let's Encrypt certificate for a nip.io host; set
+    // MQTT_TLS_INSECURE=1 only for a self-signed deployment.
+    rejectUnauthorized: process.env.MQTT_TLS_INSECURE !== "1",
   });
   globalRef.__sdlMqttClient = client;
 
   client.on("connect", () => {
     setLink("online");
-    client.subscribe(
-      [TOPIC_SHADOW, `${TOPIC_PREFIX}/#`],
-      { qos: 1 },
-      (error) => {
-        if (error) setLink("error", `subscribe ไม่สำเร็จ: ${error.message}`);
-      },
-    );
+    client.subscribe(TOPIC_WILDCARD, { qos: 1 }, (error) => {
+      if (error) setLink("error", `subscribe ไม่สำเร็จ: ${error.message}`);
+    });
   });
 
   client.on("message", (topic, payload) => {
@@ -66,6 +60,6 @@ export function startMqtt(): void {
 export function publishCmd(payload: Record<string, string>): boolean {
   const client = globalRef.__sdlMqttClient;
   if (!client || !client.connected) return false;
-  client.publish(`${TOPIC_PREFIX}/cmd`, JSON.stringify(payload), { qos: 1 });
+  client.publish(TOPIC_CMD, JSON.stringify(payload), { qos: 1 });
   return true;
 }

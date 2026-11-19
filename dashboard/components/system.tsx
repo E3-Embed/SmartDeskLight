@@ -85,8 +85,6 @@ export function ConnectionBadge({
       <span className="font-medium">{label}</span>
       {state?.source === "mock" ? (
         <span className="opacity-70">· mock</span>
-      ) : state?.source === "netpie" ? (
-        <span className="opacity-70">· NETPIE</span>
       ) : null}
     </span>
   );
@@ -425,14 +423,14 @@ export function MetricsDock({
       label: "Heap",
       value: derived.heap ? Math.round(derived.heap / 1024) : "—",
       unit: "KB",
-      hint: state?.sys?.heap_min ? `min ${Math.round(state.sys.heap_min / 1024)} KB` : undefined,
+      hint: derived.heapMin ? `min ${Math.round(derived.heapMin / 1024)} KB` : undefined,
     },
     {
       icon: IconWifi,
       label: "RSSI",
       value: derived.rssi ?? "—",
       unit: "dBm",
-      hint: state?.sys?.ip ?? undefined,
+      hint: state?.gateway?.ip ?? undefined,
     },
     {
       icon: IconActivity,
@@ -442,9 +440,11 @@ export function MetricsDock({
         derived.successRate != null && derived.successRate < 95
           ? ("alert" as const)
           : ("ok" as const),
-      hint: state?.shadow?.n1_seq
-        ? `${state.shadow.n1_rx}/${state.shadow.n1_seq}`
-        : undefined,
+      hint: state?.sensors.health?.tx_attempts
+        ? `${state.sensors.health.tx_acked}/${state.sensors.health.tx_attempts}`
+        : state?.snapshot?.n1_seq
+          ? `${state.snapshot.n1_rx}/${state.snapshot.n1_seq}`
+          : undefined,
     },
     {
       icon: IconInbox,
@@ -464,9 +464,9 @@ export function MetricsDock({
     {
       icon: IconRadio,
       label: "โหนด N1",
-      value: state?.shadow?.n1_age_s ?? "—",
+      value: state?.snapshot?.n1_age_s ?? "—",
       unit: "วิ",
-      hint: "อายุแพ็กเก็ตล่าสุด",
+      hint: derived.nodeOnline ? "อายุแพ็กเก็ตล่าสุด" : "ไม่ได้รับข้อมูล",
     },
   ];
 
@@ -494,7 +494,7 @@ export function MetricsDock({
       <div className="flex shrink-0 items-center gap-2 border-l border-line px-3">
         <span className={`chip ${state?.source === "mock" ? "chip-mock" : "chip-ok"}`}>
           <Dot tone={state?.source === "mock" ? "warn" : "ok"} pulse={false} />
-          {state?.source === "netpie" ? "NETPIE" : state?.source === "mqtt" ? "MQTT" : "MOCK"}
+          {state?.source === "mqtt" ? "MQTT" : "MOCK"}
         </span>
         <button
           type="button"
@@ -508,6 +508,9 @@ export function MetricsDock({
   );
 }
 
+const RAW_TABS = ["state", "gateway", "telemetry", "health", "presence"] as const;
+type RawTab = (typeof RAW_TABS)[number];
+
 export function RawSheet({
   state,
   onClose,
@@ -515,9 +518,27 @@ export function RawSheet({
   state: PublicState | null;
   onClose: () => void;
 }) {
-  const [tab, setTab] = useState<"shadow" | "sys" | "telemetry">("shadow");
+  const [tab, setTab] = useState<RawTab>("state");
   const payload =
-    tab === "shadow" ? state?.shadow : tab === "sys" ? state?.sys : state?.telemetry;
+    tab === "state"
+      ? state?.snapshot
+      : tab === "gateway"
+        ? state?.gateway
+        : tab === "telemetry"
+          ? state?.sensors.telemetry
+          : tab === "health"
+            ? state?.sensors.health
+            : state?.sensors.status;
+
+  const telemetry = state?.sensors.telemetry;
+  const colourCells = [
+    { label: "Lux", value: telemetry?.lux, unit: "lx" },
+    { label: "CCT", value: telemetry?.cct, unit: "K" },
+    { label: "R", value: telemetry?.r },
+    { label: "G", value: telemetry?.g },
+    { label: "B", value: telemetry?.b },
+    { label: "Clear", value: telemetry?.c },
+  ];
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -546,7 +567,7 @@ export function RawSheet({
             <p className="label mt-0.5">Raw payload</p>
           </div>
           <div className="flex items-center gap-1">
-            {(["shadow", "sys", "telemetry"] as const).map((item) => (
+            {RAW_TABS.map((item) => (
               <button
                 key={item}
                 type="button"
@@ -567,7 +588,24 @@ export function RawSheet({
             </button>
           </div>
         </div>
-        <pre className="scroll-thin m-3 mt-0 min-h-0 flex-1 overflow-auto rounded-[10px] border border-line bg-surface-2/60 p-3 text-[11.5px] leading-relaxed text-ink/90">
+
+        {tab === "telemetry" ? (
+          <div className="grid grid-cols-3 gap-2 px-3 pt-1 sm:grid-cols-6">
+            {colourCells.map((cell) => (
+              <div key={cell.label} className="rounded-[9px] border border-line bg-surface-2/60 px-2 py-1.5">
+                <p className="label text-[10px]">{cell.label}</p>
+                <p className="num text-[13px] text-ink">
+                  {cell.value ?? "—"}
+                  {cell.unit && cell.value != null ? (
+                    <span className="ml-0.5 text-[10px] text-muted">{cell.unit}</span>
+                  ) : null}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        <pre className="scroll-thin m-3 mt-2 min-h-0 flex-1 overflow-auto rounded-[10px] border border-line bg-surface-2/60 p-3 text-[11.5px] leading-relaxed text-ink/90">
           {payload ? JSON.stringify(payload, null, 2) : "— ยังไม่มีข้อมูล —"}
         </pre>
       </div>
