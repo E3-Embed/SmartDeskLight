@@ -175,6 +175,8 @@ pio run -d firmware/sensor_node -t upload
 | [เฟิร์มแวร์](docs/firmware.md) | งาน FreeRTOS และหัวข้อ Embedded Engineering Depth |
 | [การทดสอบ](docs/testing.md) | ตัวชี้วัด วิธีทดสอบ และผลลัพธ์ |
 | [แดชบอร์ด](dashboard/README.md) | topic ที่แดชบอร์ดต้อง subscribe/publish (ยังไม่ได้ implement) |
+| [Dashboard handoff](docs/dashboard-handoff.md) | สรุป topic, payload และตาราง Postgres สำหรับผู้ที่ทำแดชบอร์ดต่อ |
+| [ฐานข้อมูล](infra/db/README.md) | MQTT → PostgreSQL collector, schema ของทุก topic และ retention |
 | [แนวทางการร่วมพัฒนา](CONTRIBUTING.md) | การตั้งชื่อ branch รูปแบบ commit และนโยบายข้อมูลลับ |
 
 ## ทีม

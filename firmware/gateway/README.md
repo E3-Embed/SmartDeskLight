@@ -88,16 +88,20 @@ AI เสนอแค่ `target_lux`, `target_cct` และชุดฟิล�
 | Topic | ทิศทาง | ข้อมูล |
 |---|---|---|
 | `@msg/sdl/gw/telemetry` | เกตเวย์ → คลาวด์ ทุก 2 วินาที | สถานะเกตเวย์: `uptime_s, wifi_up, wifi_code, rssi, wifi_ch, ip, wifi_retries, mqtt_fails, ntp, time, heap, heap_min, temp_c, reset, nodes, mode, safe, pwm, buffered, dropped` |
-| `@msg/sdl/sensor/telemetry` | เกตเวย์ → คลาวด์ ทุก heartbeat (2 วินาที) และทุกชุดค่าที่อ่านได้ | heartbeat: `node_id, seq, ts, node_ms, uptime_s, heap, heap_min, wifi_ch, reset, temp_c, tx_acked, tx_attempts`; เมื่อไดรเวอร์เซนเซอร์เสร็จจะเพิ่ม `lux, r, g, b, c, cct` โดย `node_id` (`N1`, `N2`, …) บอกว่าเป็นโหนดไหน |
-| `@msg/sdl/gw/state` | เกตเวย์ → คลาวด์ ทุก 30 วินาที | snapshot ล่าสุดของทุกอย่าง: `n1_lux, n1_cct, n1_up_s, n1_heap, n1_temp_c, n1_sys_age_s, n1_rx, n1_seq, dist_mm, presence, lamp_mW, diffuser, nd, warm, pwm, safe, mode, target_lux, ai, buffered, dropped, heap, uptime_s, device` |
+| `@msg/sdl/sensor/telemetry` | เกตเวย์ → คลาวด์ ทุกชุดค่าที่อ่านได้ | ค่าที่วัดได้ของโหนด: `node_id, seq, ts, node_ms, lux, r, g, b, c, cct` — `node_id` (`N1`, `N2`, …) บอกว่าเป็นโหนดไหน; payload มีเฉพาะค่าที่วัดได้ ไม่มี heartbeat ปน |
+| `@msg/sdl/sensor/health` | เกตเวย์ → คลาวด์ ทุก heartbeat (2 วินาที) | สุขภาพบอร์ดของโหนด: `node_id, seq, ts, node_ms, uptime_s, heap, heap_min, wifi_ch, reset, temp_c, tx_acked, tx_attempts` — ไม่มี `lux`/`cct` เพื่อไม่ให้ค่าศูนย์ถูกตีความเป็นห้องมืด |
+| `@msg/sdl/gw/state` | เกตเวย์ → คลาวด์ ทุก 10 วินาที | snapshot ล่าสุดของทุกอย่าง: `n1_lux, n1_cct, n1_up_s, n1_heap, n1_temp_c, n1_sys_age_s, n1_rx, n1_seq, dist_mm, presence, lamp_mW, diffuser, nd, warm, pwm, safe, mode, target_lux, ai, buffered, dropped, heap, uptime_s, device` |
 | `@msg/sdl/cmd` | แดชบอร์ด → เกตเวย์ | `{"mode":"coding"}` หรือ `{"feedback":"too_bright"}` / `"too_dim"` |
 | `@msg/sdl/alert` | เกตเวย์ → คลาวด์ | ข้อความแจ้งเตือน (ส่งเข้า Discord ด้วย) |
-| `@msg/sdl/gateway/status` | เกตเวย์ → คลาวด์ (retained) | `"online"` / `"offline"` — `online` ส่งตอนเชื่อมต่อสำเร็จ ส่วน `offline` เป็น MQTT Last Will ที่ broker ส่งแทนเมื่อเกตเวย์ขาดการเชื่อมต่อเกิน keepalive 30 วินาที แดชบอร์ดจึงรู้สถานะลิงก์ทันทีที่ subscribe |
+| `@msg/sdl/gw/status` | เกตเวย์ → คลาวด์ (retained) | `"online"` / `"offline"` — `online` ส่งตอนเชื่อมต่อสำเร็จ ส่วน `offline` เป็น MQTT Last Will ที่ broker ส่งแทนเมื่อเกตเวย์ขาดการเชื่อมต่อเกิน keepalive 30 วินาที แดชบอร์ดจึงรู้สถานะลิงก์ทันทีที่ subscribe |
 | `@msg/sdl/sensor/status` | เกตเวย์ → คลาวด์ (retained) | presence ของโหนด: `{"ts":…,"N1":"online"}` — เขียนแทนโหนดที่ไม่มี MQTT session; `online` เมื่อมี heartbeat/ค่าที่วัดได้ภายใน 10 วินาที, `offline` เมื่อเงียบกว่านั้น; เขียนซ้ำเมื่อเปลี่ยน, ตอนเชื่อมต่อใหม่ และทุก 30 วินาที |
 
-ทั้งหมดเป็น topic MQTT ธรรมดาบน EMQX ของเรา (`@` นำหน้าได้ตามสเปก) จึงไม่ต้องลงทะเบียน alias แบบ NETPIE อีก จำไว้ว่า compose เปิดเฉพาะ 1883 บน loopback — client ภายนอกต้องผ่าน NPMplus ที่พอร์ต 8883 (TLS) หรือ wss
+ทั้งหมดเป็น topic MQTT ธรรมดาบน EMQX ของเรา (`@` นำหน้าได้ตามสเปก) จึงไม่ต้องลงทะเบียน alias แบบ NETPIE อีก topic ของข้อมูลใช้รูปแบบ `@msg/sdl/<source>/<kind>` (`source` = `gw` หรือ `sensor`; `kind` = `telemetry`, `health`, `state`, `status`) ส่วนคำสั่ง/แจ้งเตือนเป็น `@msg/sdl/cmd` กับ `@msg/sdl/alert` — ชื่อทั้งหมดมาจาก `cfg::kTopic*` ใน `config.h` ฝ่ายเดียว จำไว้ว่า compose เปิดเฉพาะ 1883 บน loopback — client ภายนอกต้องผ่าน NPMplus ที่พอร์ต 8883 (TLS) หรือ wss
 
-เฟิร์มแวร์ publish ด้วย QoS 0 และ retain เฉพาะ `@msg/sdl/gateway/status` กับ `@msg/sdl/sensor/status`; heartbeat ของโหนดไม่ได้ถูกเก็บย้อนหลังตอนออฟไลน์ (ค่าล่าสุดยังอยู่ใน `@msg/sdl/gw/state`)
+เฟิร์มแวร์ publish ด้วย QoS 0 และ retain เฉพาะ `@msg/sdl/gw/status` กับ `@msg/sdl/sensor/status`; heartbeat ของโหนดไม่ได้ถูกเก็บย้อนหลังตอนออฟไลน์ (ค่าล่าสุดยังอยู่ใน `@msg/sdl/gw/state`)
+
+> [!NOTE]
+> สถานะเกตเวย์ย้ายจาก `@msg/sdl/gateway/status` มาเป็น `@msg/sdl/gw/status` — หลังแฟลชแล้วให้ลบ retained message เก่าใน EMQX Dashboard (MQTT → Retained)
 
 ### ตัวชี้วัดที่อ่านได้จาก state snapshot
 
@@ -107,4 +111,4 @@ AI เสนอแค่ `target_lux`, `target_cct` และชุดฟิล�
 
 ### ทดสอบการขยายระบบ
 
-ตั้ง `cfg::kSimulatedNodes = 2` ใน `config.h` เพื่อเพิ่มโหนดจำลอง 101 และ 102 คู่กับโหนดจริง 1 ทุกโหนดใช้ `@msg/sdl/sensor/telemetry` ร่วมกันและแยกด้วย `node_id` ส่วน snapshot จะมีฟิลด์ `n<id>_*` ของแต่ละโหนด
+ตั้ง `cfg::kSimulatedNodes = 2` ใน `config.h` เพื่อเพิ่มโหนดจำลอง 101 และ 102 คู่กับโหนดจริง 1 ทุกโหนดใช้ `@msg/sdl/sensor/telemetry` (ค่าที่วัดได้) และ `@msg/sdl/sensor/health` (heartbeat) ร่วมกันและแยกด้วย `node_id` ส่วน snapshot จะมีฟิลด์ `n<id>_*` ของแต่ละโหนด

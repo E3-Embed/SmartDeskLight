@@ -36,9 +36,17 @@ struct แบบ packed นิยามไว้ใน [`firmware/common/message
 
 ## เกตเวย์ ↔ EMQX (self-hosted) · MQTTS (พอร์ต 8883 ผ่าน NPMplus)
 
+topic ของข้อมูลใช้รูปแบบเดียวกัน: `<root>/<source>/<kind>` โดย `root = @msg/sdl` และ
+`source` เป็น `gw` หรือ `sensor`; ส่วนคำสั่งและแจ้งเตือนเป็น `<root>/cmd` กับ `<root>/alert`
+เฟิร์มแวร์เก็บชื่อทั้งหมดไว้ที่ `cfg::kTopic*` ใน
+[`config.h`](../firmware/gateway/src/config.h) และเป็นฝ่ายกำหนดชื่อ topic แต่เพียงผู้เดียว
+
 | Topic | ทิศทาง | ข้อมูล |
 |---|---|---|
 | `@msg/sdl/gw/telemetry` | เกตเวย์ → คลาวด์ | สถานะเกตเวย์ (Wi-Fi, MQTT, NTP, heap, uptime, reset reason) ทุก 2 วินาที |
+| `@msg/sdl/sensor/telemetry` | เกตเวย์ → คลาวด์ | **ค่าที่วัดได้** ของโหนดหนึ่งชุด: `lux, r, g, b, c, cct`; `node_id` ระบุว่าเป็นโหนดไหน |
+| `@msg/sdl/sensor/health` | เกตเวย์ → คลาวด์ | **heartbeat/สุขภาพบอร์ด** ของโหนด ทุก 2 วินาที: `uptime_s, heap, reset, temp_c, tx_*` — ไม่มีค่าที่วัดได้ปนมา |
+| `@msg/sdl/gw/state` | เกตเวย์ → คลาวด์ | snapshot ล่าสุดของทุกโหนดและสถานะโคม สำหรับ Dashboard (ทุก 10 วินาที) |
 | `@msg/sdl/gw/state` | เกตเวย์ → คลาวด์ | snapshot ล่าสุดของทุกโหนดและสถานะโคม สำหรับ Dashboard (ทุก ~10 วินาที) — มีฟิลด์ `ts` (epoch วินาที, 0 จนกว่า NTP จะ sync) |
 | `@msg/sdl/sensor/telemetry` | เกตเวย์ → คลาวด์ | ค่าที่วัดได้ของโหนด (`lux, r, g, b, c, cct`), `node_id` บอกว่าโหนดไหน; ส่งเฉพาะเมื่อ BH1750 อ่านสำเร็จ |
 | `@msg/sdl/sensor/health` | เกตเวย์ → คลาวด์ | heartbeat/สุขภาพบอร์ดของโหนด (`uptime_s, heap, temp_c, reset, tx_acked, tx_attempts`) ทุก 2 วินาที |
@@ -54,7 +62,10 @@ topic ทั้งหมดเป็น topic MQTT ธรรมดาบน EMQX
 `@msg/sdl/sensor/status` เป็น retained แผนที่เดียวที่เกตเวย์เขียนแทนโหนด: `online` เมื่อมี heartbeat หรือค่าที่วัดได้ภายใน 10 วินาที (`kNodeStaleMs`) และ `offline` เมื่อเงียบกว่านั้น แต่ละโหนดมี key `N<id>`; โหนดที่เกตเวย์ยังไม่เคยเห็นในรอบบูตนี้จะไม่มี key (แปลว่าไม่ทราบสถานะ) เกตเวย์เขียนซ้ำทุกครั้งที่สถานะเปลี่ยน ทุกครั้งที่เชื่อมต่อใหม่ และทุก 30 วินาทีเพื่อให้ `ts` ใช้เป็นอายุของข้อมูลได้
 
 > [!IMPORTANT]
-> ถ้าเกตเวย์ออฟไลน์ จะไม่มีใครอัปเดต `@msg/sdl/sensor/status` ได้ — ค่าที่ค้างอยู่จะยังเป็น `online` แดชบอร์ดจึงต้องถือว่า presence ของโหนดใช้ได้เฉพาะเมื่อ `@msg/sdl/gateway/status` เป็น `online` หรือเทียบ `ts` กับเวลาปัจจุบัน
+> ถ้าเกตเวย์ออฟไลน์ จะไม่มีใครอัปเดต `@msg/sdl/sensor/status` ได้ — ค่าที่ค้างอยู่จะยังเป็น `online` แดชบอร์ดจึงต้องถือว่า presence ของโหนดใช้ได้เฉพาะเมื่อ `@msg/sdl/gw/status` เป็น `online` หรือเทียบ `ts` กับเวลาปัจจุบัน
+
+> [!NOTE]
+> **การย้ายชื่อ topic:** เดิมสถานะเกตเวย์อยู่ที่ `@msg/sdl/gateway/status` ตอนนี้ใช้ `@msg/sdl/gw/status` ให้ตรงกับกลุ่ม `gw/*` — หลังแฟลชเฟิร์มแวร์ใหม่แล้ว ให้ลบ retained message เก่าที่ `@msg/sdl/gateway/status` ใน EMQX Dashboard (MQTT → Retained) เพื่อไม่ให้ค้างอยู่ใน broker
 
 heartbeat ของโหนดบน `@msg/sdl/sensor/health` (ค่าสุขภาพของบอร์ด):
 
@@ -64,8 +75,9 @@ heartbeat ของโหนดบน `@msg/sdl/sensor/health` (ค่าสุ�
  "temp_c":47.5,"tx_acked":21,"tx_attempts":21}
 ```
 
-ค่าที่วัดได้จาก BH1750/TCS34725 ใช้ topic เดียวกัน โหนดส่งเฉพาะเมื่ออ่าน BH1750 สำเร็จ (อ่านพลาดจะไม่ส่ง
-`lux` เป็น 0 แทน) `r/g/b/c` เป็นค่าดิบของ TCS34725 ที่ 100.8 ms / gain 16x และเป็น 0 ทั้งหมดเมื่ออ่านสีไม่ได้
+ค่าที่วัดได้จาก BH1750/TCS34725 อยู่บน `@msg/sdl/sensor/telemetry` แยกจาก heartbeat คนละ topic
+โหนดส่งเฉพาะเมื่ออ่าน BH1750 สำเร็จ (อ่านพลาดจะไม่ส่ง `lux` เป็น 0 แทน) `r/g/b/c` เป็นค่าดิบของ
+TCS34725 ที่ 100.8 ms / gain 16x และเป็น 0 ทั้งหมดเมื่ออ่านสีไม่ได้
 ส่วน `cct = 0` แปลว่าไม่มีค่าที่เชื่อถือได้ (มืดเกินไป อิ่มตัว หรืออ่านสีไม่ได้) ไม่ใช่ 0 K:
 
 ```json
