@@ -3,6 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 /**
  * Optional HTTP Basic auth. Inactive unless both variables are set, so local
  * development stays open. Put the dashboard behind HTTPS when you enable it.
+ *
+ * Next 16 calls this file convention `proxy` (it was `middleware` before).
  */
 const USER = process.env.DASHBOARD_USER;
 const PASSWORD = process.env.DASHBOARD_PASSWORD;
@@ -25,7 +27,7 @@ function safeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   if (!USER || !PASSWORD) return NextResponse.next();
 
   const header = request.headers.get("authorization") ?? "";
