@@ -47,6 +47,30 @@ constexpr uint32_t kPresenceTimeoutMs = 5UL * 60UL * 1000UL;  // dim when nobody
 constexpr int kFeedbackHistory = 5;
 constexpr float kFeedbackStep = 0.15f;   // "too bright / too dim" changes target by 15 %
 
+// ---------------------------------------------------------------- gateway sensors
+// PIR and VL53L0X both feed presence; INA219 measures the lamp's own power.
+constexpr uint32_t kSensorPeriodMs = 200;      // SensorTask cadence
+constexpr uint32_t kSensorRetryMs = 5000;      // re-init a missing/stuck sensor this often
+constexpr uint8_t kSensorFailLimit = 10;       // consecutive failed reads -> mark it missing
+constexpr uint32_t kPirWarmupMs = 30000;       // HC-SR501 needs 30-60 s to settle after power-up
+constexpr uint32_t kPirConfirmMs = 400;        // HIGH for this long = real motion, not a glitch
+constexpr uint32_t kPirHoldMs = 30000;         // bridge the module's own retrigger dead time
+// Mount the VL53L0X pointing down at the chair/desk. Calibrate this on the bench: it must
+// sit clearly below the empty-desk distance and above a seated person's head. The default
+// is deliberately conservative (PIR is the primary detector) so an empty desk is not read
+// as a person just because the lamp head is close to the surface.
+constexpr uint16_t kPresenceDistanceMm = 300;
+constexpr uint16_t kDistanceValidMaxMm = 2000;  // 8190 means "no target"; far irrelevant walls
+constexpr uint32_t kDistanceConfirmMs = 400;    // two close samples before counting presence
+constexpr uint32_t kDistanceHoldMs = 10000;     // a hand or book crossing the beam must not drop it
+constexpr float kInaShuntOhms = 0.1f;           // shunt on the common INA219 breakout
+constexpr float kInaMaxCurrentA = 2.0f;         // sets Current_LSB / calibration
+constexpr uint32_t kEnergyDtMaxMs = 1000;       // clamp gaps after a blocking sensor init
+// Bench debugging: log the raw PIR level, every edge, and a 1 s presence summary to Serial.
+// Set false for a normal build — the log is 1 line/s and not useful once the threshold is set.
+constexpr bool kSensorDebug = true;
+constexpr uint32_t kSensorDebugPeriodMs = 1000;
+
 // ---------------------------------------------------------------- nodes / ESP-NOW
 constexpr int kMaxNodes = 8;
 // Local bench test: no access point or cloud connection. Set false for the full system.
@@ -80,7 +104,7 @@ constexpr uint16_t kMqttPort = 8883;  // NPMplus terminates TLS; EMQX itself lis
 // built-in bundle (see ca_bundle.h), so the firmware does a normal chain check: no PEM and no
 // leaf fingerprint in secrets.h.
 constexpr uint32_t kStatePeriodMs = 10000;        // full snapshot on @msg/sdl/gw/state
-constexpr uint32_t kGwTelemetryPeriodMs = 2000;   // gateway health on @msg/sdl/gw/telemetry (matches the node heartbeat)
+constexpr uint32_t kGwTelemetryPeriodMs = 1000;   // gateway health on @msg/sdl/gw/telemetry (matches the node heartbeat)
 // MQTT PINGREQ interval. The broker declares us dead after 1.5x this, which is also how
 // long the retained Last Will on @msg/sdl/gw/status takes to flip to "offline".
 constexpr uint16_t kMqttKeepAliveSec = 30;

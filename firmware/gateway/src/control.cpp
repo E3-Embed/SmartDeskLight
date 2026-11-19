@@ -41,7 +41,9 @@ Readings snapshot() {
     }
   }
   const auto &l = app::state.local;
-  r.someoneThere = l.lastPresenceMs == 0 /* PIR never fired yet */ ||
+  // SensorTask seeds lastPresenceMs at boot and refreshes it while PIR or the distance
+  // sensor sees someone, so the 5-minute away timer starts from the last real detection.
+  r.someoneThere = l.lastPresenceMs == 0 /* sensor task not up yet */ ||
                    now - l.lastPresenceMs < cfg::kPresenceTimeoutMs;
   return r;
 }

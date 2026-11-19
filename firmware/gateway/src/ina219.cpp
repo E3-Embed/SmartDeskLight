@@ -14,6 +14,8 @@ constexpr uint16_t kConfigValue = 0x399F;
 }  // namespace
 
 bool Ina219::begin(float shuntOhms, float maxCurrentA) {
+  if (shuntOhms <= 0.0f || maxCurrentA <= 0.0f) return false;
+
   if (!writeRegister(kRegConfig, kConfigReset)) return false;
   delay(2);
 
@@ -21,8 +23,14 @@ bool Ina219::begin(float shuntOhms, float maxCurrentA) {
   //   Current_LSB = Max_Expected_I / 2^15
   //   Cal         = trunc(0.04096 / (Current_LSB * R_shunt))
   //   Power_LSB   = 20 * Current_LSB
-  currentLsbA_ = maxCurrentA / 32768.0f;
-  calibration_ = static_cast<uint16_t>(0.04096f / (currentLsbA_ * shuntOhms));
+  // A calibration that does not fit in 16 bits would silently clamp, so reject it and
+  // let SensorTask report the part as missing instead of publishing wrong amps.
+  const float lsb = maxCurrentA / 32768.0f;
+  const float cal = 0.04096f / (lsb * shuntOhms);
+  if (cal < 1.0f || cal > 65535.0f) return false;
+
+  currentLsbA_ = lsb;
+  calibration_ = static_cast<uint16_t>(cal);
   currentLsbA_ = 0.04096f / (calibration_ * shuntOhms);  // exact LSB after truncation
   powerLsbW_ = 20.0f * currentLsbA_;
 

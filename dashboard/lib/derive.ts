@@ -14,6 +14,8 @@ export type LampState =
 
 export type Tone = "ok" | "warn" | "alert" | "safe" | "idle";
 
+export type PresenceSource = "pir" | "tof" | "pir+tof" | "none";
+
 export interface StateMeta {
   th: string;
   en: string;
@@ -48,12 +50,17 @@ export interface Derived {
   pwmPct: number;
   powerMw: number | null;
   powerW: number | null;
+  energyWh: number | null;
   voltage: number | null;
   currentMa: number | null;
   presence: boolean;
+  presenceSource: PresenceSource | null;
   safe: boolean;
   ai: boolean;
   distanceMm: number | null;
+  distOk: boolean;
+  tofOk: boolean | null;
+  inaOk: boolean | null;
   errorPct: number | null;
   inTolerance: boolean;
   successRate: number | null;
@@ -71,9 +78,16 @@ export interface Derived {
 }
 
 const MODE_VALUES: Mode[] = ["reading", "coding", "drawing"];
+const PRESENCE_SOURCES: PresenceSource[] = ["pir", "tof", "pir+tof", "none"];
 
 export function asMode(value: unknown): Mode {
   return MODE_VALUES.includes(value as Mode) ? (value as Mode) : "reading";
+}
+
+export function asPresenceSource(value: unknown): PresenceSource | null {
+  return PRESENCE_SOURCES.includes(value as PresenceSource)
+    ? (value as PresenceSource)
+    : null;
 }
 
 /** The retained presence map only counts while the gateway is alive. */
@@ -97,7 +111,25 @@ export function derive(state: PublicState, now = Date.now()): Derived {
   const targetLux = snapshot?.target_lux ?? 500;
   const targetCct = snapshot?.target_cct ?? 4000;
   const pwm = clamp(snapshot?.pwm ?? 0, 0, 255);
-  const presence = snapshot?.presence !== 0;
+  // The 2 s gateway telemetry carries presence and power; prefer it while it is fresh,
+  // otherwise fall back to the 10 s state snapshot.
+  const gatewayFresh =
+    state.gatewayAt != null && now - state.gatewayAt <= STALE_TELEMETRY_MS;
+  const liveGateway = gatewayFresh ? gateway : null;
+  const presence = (liveGateway?.presence ?? snapshot?.presence) !== 0;
+  const presenceSource = asPresenceSource(
+    liveGateway?.presence_src ?? snapshot?.presence_src,
+  );
+  const rawDistance = liveGateway?.dist_mm ?? snapshot?.dist_mm;
+  const distanceMm = rawDistance ? rawDistance : null;
+  const distOkRaw = liveGateway?.dist_ok ?? snapshot?.dist_ok;
+  const distOk = distOkRaw != null ? distOkRaw === 1 : distanceMm != null;
+  const tofOkRaw = liveGateway?.tof_ok ?? snapshot?.tof_ok;
+  const tofOk = tofOkRaw == null ? null : tofOkRaw === 1;
+  const inaOkRaw = liveGateway?.ina_ok ?? snapshot?.ina_ok;
+  const inaOk = inaOkRaw == null ? null : inaOkRaw === 1;
+  const energyWhRaw = liveGateway?.energy_Wh ?? snapshot?.energy_Wh;
+  const energyWh = typeof energyWhRaw === "number" ? energyWhRaw : null;
   const safe = snapshot?.safe === 1 || gateway?.safe === 1;
 
   const snapshotAge = state.snapshotAt == null ? Infinity : now - state.snapshotAt;
@@ -137,7 +169,9 @@ export function derive(state: PublicState, now = Date.now()): Derived {
         ? clamp(((snapshot?.n1_rx ?? 0) / (snapshot?.n1_seq ?? 1)) * 100, 0, 100)
         : null;
 
-  const powerMw = snapshot?.lamp_mW ?? null;
+  const powerMw = liveGateway?.lamp_mW ?? snapshot?.lamp_mW ?? null;
+  const voltage = liveGateway?.bus_V ?? snapshot?.bus_V ?? null;
+  const currentMa = liveGateway?.current_mA ?? snapshot?.current_mA ?? null;
 
   return {
     state: lampState,
@@ -151,12 +185,17 @@ export function derive(state: PublicState, now = Date.now()): Derived {
     pwmPct: (pwm / 255) * 100,
     powerMw,
     powerW: powerMw == null ? null : powerMw / 1000,
-    voltage: snapshot?.bus_V ?? null,
-    currentMa: snapshot?.current_mA ?? null,
+    energyWh,
+    voltage,
+    currentMa,
     presence,
+    presenceSource,
     safe,
     ai: snapshot?.ai === 1,
-    distanceMm: snapshot?.dist_mm ? snapshot.dist_mm : null,
+    distanceMm,
+    distOk,
+    tofOk,
+    inaOk,
     errorPct,
     inTolerance,
     successRate,

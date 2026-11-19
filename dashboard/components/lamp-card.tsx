@@ -27,6 +27,13 @@ const FILTERS = [
   { key: "warm", th: "อุ่นสี", en: "Warm" },
 ] as const;
 
+const PRESENCE_SOURCE_LABEL: Record<NonNullable<Derived["presenceSource"]>, string> = {
+  pir: "PIR",
+  tof: "ToF",
+  "pir+tof": "PIR + ToF",
+  none: "—",
+};
+
 
 function polar(cx: number, cy: number, radius: number, deg: number) {
   const angle = ((deg - 90) * Math.PI) / 180;
@@ -297,6 +304,11 @@ export function LampCard({
                   <IconLock size={10} /> Safe
                 </span>
               ) : null}
+              {derived.tofOk === false || derived.inaOk === false ? (
+                <span className="chip chip-alert">
+                  <IconAlert size={10} /> Sensor
+                </span>
+              ) : null}
             </div>
           </div>
         </div>
@@ -454,7 +466,10 @@ export function LampCard({
               {derived.presence ? "มีคนที่โต๊ะ" : "ไม่มีคนที่โต๊ะ"}
             </p>
             <p className="num text-[11px] text-muted">
-              {derived.distanceMm ? `${derived.distanceMm} mm` : "—"} · PIR
+              {derived.distanceMm ? `${derived.distanceMm} mm` : "—"} ·{" "}
+              {derived.presenceSource
+                ? PRESENCE_SOURCE_LABEL[derived.presenceSource]
+                : "PIR"}
             </p>
           </div>
           <span className={`chip ${derived.presence ? "chip-ok" : ""}`}>
@@ -482,6 +497,7 @@ export function LampCard({
         </span>
         <span className="truncate">
           lamp {formatChip(derived.powerMw)} · {derived.mode}
+          {derived.energyWh != null ? ` · ${derived.energyWh.toFixed(2)} Wh` : ""}
         </span>
       </div>
     </section>
