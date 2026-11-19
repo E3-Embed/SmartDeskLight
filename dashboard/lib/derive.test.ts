@@ -87,6 +87,44 @@ describe("derive", () => {
     expect(derive(state, NOW).state).toBe("away");
   });
 
+  it("prefers fresh gateway telemetry for presence and power", () => {
+    const state = makeState({
+      gateway: {
+        ...makeState().gateway,
+        presence: 0,
+        presence_src: "none",
+        lamp_mW: 120,
+        energy_Wh: 1.25,
+      },
+      gatewayAt: NOW - 1000,
+    });
+    const derived = derive(state, NOW);
+    expect(derived.state).toBe("away");
+    expect(derived.presenceSource).toBe("none");
+    expect(derived.powerMw).toBe(120);
+    expect(derived.energyWh).toBe(1.25);
+  });
+
+  it("ignores stale gateway telemetry and falls back to the snapshot", () => {
+    const state = makeState({
+      gateway: { ...makeState().gateway, presence: 0, presence_src: "none" },
+      gatewayAt: NOW - 60_000,
+    });
+    const derived = derive(state, NOW);
+    expect(derived.presence).toBe(true);
+    expect(derived.presenceSource).toBeNull();
+  });
+
+  it("surfaces gateway sensor health when the firmware reports it", () => {
+    const state = makeState({
+      gateway: { ...makeState().gateway, tof_ok: 0, ina_ok: 1, presence_src: "tof" },
+    });
+    const derived = derive(state, NOW);
+    expect(derived.tofOk).toBe(false);
+    expect(derived.inaOk).toBe(true);
+    expect(derived.presenceSource).toBe("tof");
+  });
+
   it("reports emergency before other states when safe is set", () => {
     const state = makeState({
       snapshot: { ...makeState().snapshot, safe: 1, presence: 0 },

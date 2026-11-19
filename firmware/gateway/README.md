@@ -10,7 +10,7 @@
 |---|:-:|:-:|---|---|
 | `ControlTask` | 4 | 1 | `src/control.cpp` | เหตุการณ์ปุ่มหยุด, สถานะปลอดภัย, ควบคุมแบบวงปิดจาก lux ที่วัดได้ (ฟิลเตอร์ + PWM) |
 | `EspNowRxTask` | 3 | 1 | `src/espnow_link.cpp` | ดึงแพ็กเก็ต ESP-NOW, ตัดแพ็กเก็ตซ้ำด้วย `(node_id, seq)`, ตารางโหนด |
-| `SensorTask` | 2 | 1 | `src/sensors.cpp` | อ่านระยะ VL53L0X, การมีคนอยู่จาก PIR และกำลังไฟจาก INA219 ทุก 200 ms |
+| `SensorTask` | 2 | 1 | `src/sensors.cpp` | อ่านระยะ VL53L0X และ PIR (รวมเป็น presence แบบ PIR หรือระยะใกล้) และกำลังไฟจาก INA219 ทุก 200 ms; re-init เซนเซอร์ที่หลุดทุก 5 วินาที |
 | `CloudTask` | 1 | 0 | `src/cloud.cpp` | Wi-Fi, MQTTS, เก็บแล้วส่งต่อ, state snapshot, คำสั่ง, AI, การแจ้งเตือน |
 | `StatusLedTask` | 1 | 1 | `src/status_led.cpp` | LED RGB บนบอร์ด (WS2812 GPIO48): ขาวกะพริบครั้งเดียว=บูต, ขาวค่อยๆ สว่าง=กำลังต่อ Wi-Fi, แดง=ต่อ Wi-Fi ไม่ได้, ฟ้า=รอ NTP, เหลือง=รอ MQTT, ม่วงแดง=โหนดเงียบ, ม่วง=โหนดยังอยู่แต่ยังไม่มีค่าที่วัดได้, เขียว=ปกติ, น้ำเงิน=สถานะปลอดภัย |
 | `loop()` | 1 | 1 | `src/main.cpp` | LED สถานะภายนอก GPIO2 (ติดค้าง = เชื่อมคลาวด์ได้, กะพริบ = ออฟไลน์) |
@@ -54,7 +54,7 @@
 1. จัดการเหตุการณ์ในคิว (ปุ่มหยุดสลับสถานะปลอดภัย; โหมด / feedback / โปรไฟล์จาก AI เปลี่ยนค่าเป้าหมาย)
 2. **สถานะปลอดภัย** (กดปุ่มหยุด) → พับฟิลเตอร์ออก, LED ระดับกลาง, ไม่ขยับอย่างอื่น
 3. **เซนเซอร์ขัดข้อง** (ไม่มีแพ็กเก็ตจากโหนด 1 นาน 10 วินาที) → ความสว่างระดับปลอดภัย + แจ้งเตือน Discord แล้วกลับมาทำงานเองเมื่อมีข้อมูล
-4. **ไม่มีคนที่โต๊ะ** (PIR ไม่ตรวจพบการเคลื่อนไหว 5 นาที) → ปิด LED และขอโปรไฟล์จาก AI ใหม่เมื่อมีคนกลับมา
+4. **ไม่มีคนที่โต๊ะ** (PIR ไม่พบการเคลื่อนไหวและ VL53L0X ไม่เห็นระยะใกล้กว่า `kPresenceDistanceMm` ต่อเนื่อง 5 นาที) → ปิด LED และขอโปรไฟล์จาก AI ใหม่เมื่อมีคนกลับมา
 5. กรณีปกติ: ขยับฟิลเตอร์ตามโปรไฟล์ (เปลี่ยนได้สูงสุดครั้งละหนึ่งแผ่นทุก 10 วินาที) แล้วปรับ PWM แบบ proportional: `pwm += clamp(Kp × (target − lux), ±12)` และคงค่าไว้เมื่อค่าคลาดเคลื่อนอยู่ในช่วง ±7 % ของเป้าหมาย
 6. ถ้า PWM ถึงขีดสุดแล้วยังไม่ถึงเป้าหมาย จะสลับฟิลเตอร์ ND — แอคชูเอเตอร์เชิงกลช่วยขยายช่วงที่ PWM อย่างเดียวทำไม่ได้
 
@@ -87,10 +87,10 @@ AI เสนอแค่ `target_lux`, `target_cct` และชุดฟิล�
 
 | Topic | ทิศทาง | ข้อมูล |
 |---|---|---|
-| `@msg/sdl/gw/telemetry` | เกตเวย์ → คลาวด์ ทุก 2 วินาที | สถานะเกตเวย์: `uptime_s, wifi_up, wifi_code, rssi, wifi_ch, ip, wifi_retries, mqtt_fails, ntp, time, heap, heap_min, temp_c, reset, nodes, mode, safe, pwm, buffered, dropped` |
+| `@msg/sdl/gw/telemetry` | เกตเวย์ → คลาวด์ ทุก 2 วินาที | สถานะเกตเวย์: `uptime_s, wifi_up, wifi_code, rssi, wifi_ch, ip, wifi_retries, mqtt_fails, ntp, time, heap, heap_min, temp_c, reset, nodes, mode, safe, pwm, buffered, dropped` พร้อมค่าสดของเซนเซอร์เกตเวย์: `dist_mm, dist_ok, tof_ok, presence, presence_src, lamp_mW, bus_V, current_mA, ina_ok, energy_Wh` |
 | `@msg/sdl/sensor/telemetry` | เกตเวย์ → คลาวด์ ทุกชุดค่าที่อ่านได้ | ค่าที่วัดได้ของโหนด: `node_id, seq, ts, node_ms, lux, r, g, b, c, cct` — `node_id` (`N1`, `N2`, …) บอกว่าเป็นโหนดไหน; payload มีเฉพาะค่าที่วัดได้ ไม่มี heartbeat ปน |
 | `@msg/sdl/sensor/health` | เกตเวย์ → คลาวด์ ทุก heartbeat (2 วินาที) | สุขภาพบอร์ดของโหนด: `node_id, seq, ts, node_ms, uptime_s, heap, heap_min, wifi_ch, reset, temp_c, tx_acked, tx_attempts` — ไม่มี `lux`/`cct` เพื่อไม่ให้ค่าศูนย์ถูกตีความเป็นห้องมืด |
-| `@msg/sdl/gw/state` | เกตเวย์ → คลาวด์ ทุก 10 วินาที | snapshot ล่าสุดของทุกอย่าง: `n1_lux, n1_cct, n1_up_s, n1_heap, n1_temp_c, n1_sys_age_s, n1_rx, n1_seq, dist_mm, presence, lamp_mW, diffuser, nd, warm, pwm, safe, mode, target_lux, ai, buffered, dropped, heap, uptime_s, device` |
+| `@msg/sdl/gw/state` | เกตเวย์ → คลาวด์ ทุก 10 วินาที | snapshot ล่าสุดของทุกอย่าง: `n1_lux, n1_cct, n1_up_s, n1_heap, n1_temp_c, n1_sys_age_s, n1_rx, n1_seq, dist_mm, dist_ok, tof_ok, presence, presence_src, lamp_mW, bus_V, current_mA, ina_ok, energy_Wh, energy_<mode>_Wh, power_<mode>_mW, diffuser, nd, warm, pwm, safe, mode, target_lux, target_cct, ai, buffered, dropped, heap, uptime_s, device` |
 | `@msg/sdl/cmd` | แดชบอร์ด → เกตเวย์ | `{"mode":"coding"}` หรือ `{"feedback":"too_bright"}` / `"too_dim"` |
 | `@msg/sdl/alert` | เกตเวย์ → คลาวด์ | ข้อความแจ้งเตือน (ส่งเข้า Discord ด้วย) |
 | `@msg/sdl/gw/status` | เกตเวย์ → คลาวด์ (retained) | `"online"` / `"offline"` — `online` ส่งตอนเชื่อมต่อสำเร็จ ส่วน `offline` เป็น MQTT Last Will ที่ broker ส่งแทนเมื่อเกตเวย์ขาดการเชื่อมต่อเกิน keepalive 30 วินาที แดชบอร์ดจึงรู้สถานะลิงก์ทันทีที่ subscribe |
@@ -106,7 +106,9 @@ AI เสนอแค่ `target_lux`, `target_cct` และชุดฟิล�
 ### ตัวชี้วัดที่อ่านได้จาก state snapshot
 
 - **อัตราการส่งแพ็กเก็ตสำเร็จ:** `tx_acked / tx_attempts` จาก heartbeat ของโหนด (นับรวมการส่งซ้ำ) — แม่นกว่า `n1_rx / n1_seq` เพราะ `seq` เป็นตัวนับร่วมของทุกชนิดแพ็กเก็ต ไม่ได้นับเฉพาะ telemetry
-- **Uptime:** `uptime_s`; **กำลังไฟแต่ละโหมด:** `lamp_mW` คู่กับ `mode`, `pwm` และฟิลด์ฟิลเตอร์
+- **Uptime:** `uptime_s`; **กำลังไฟแต่ละโหมด:** `power_<mode>_mW` (กำลังเฉลี่ยจากพลังงานที่อินทิเกรต) คู่กับ `energy_<mode>_Wh`; ค่า `lamp_mW` คือกำลังขณะนั้นและ `energy_Wh` คือพลังงานสะสมตั้งแต่บูต
+- **Presence:** `presence` (PIR หรือ VL53L0X) และ `presence_src` (`pir`, `tof`, `pir+tof`, `none`); `dist_ok=0` แปลว่ายังไม่มีเป้าวัดได้ ไม่ใช่ระยะ 0 mm
+- **สุขภาพเซนเซอร์:** `tof_ok` / `ina_ok` เป็น 0 เมื่อเซนเซอร์ไม่ตอบ; SensorTask ลอง re-init ทุก 5 วินาทีและแจ้งเตือนเมื่อหลุด/กลับมา
 - **เก็บแล้วส่งต่อ:** `buffered` เพิ่มขึ้นขณะออฟไลน์ และลดลงเหลือ 0 หลังเชื่อมต่อได้อีกครั้ง ส่วน `dropped` ต้องเป็น 0 เมื่อขาดการเชื่อมต่อไม่เกินราว 5 นาที
 
 ### ทดสอบการขยายระบบ

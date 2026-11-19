@@ -43,7 +43,7 @@ topic ของข้อมูลใช้รูปแบบเดียวก�
 
 | Topic | ทิศทาง | ข้อมูล |
 |---|---|---|
-| `@msg/sdl/gw/telemetry` | เกตเวย์ → คลาวด์ | สถานะเกตเวย์ (Wi-Fi, MQTT, NTP, heap, uptime, reset reason) ทุก 2 วินาที |
+| `@msg/sdl/gw/telemetry` | เกตเวย์ → คลาวด์ | สถานะเกตเวย์ (Wi-Fi, MQTT, NTP, heap, uptime, reset reason) ทุก 2 วินาที พร้อมค่าสดของเซนเซอร์เกตเวย์: `dist_mm, dist_ok, tof_ok, presence, presence_src, lamp_mW, bus_V, current_mA, ina_ok, energy_Wh` |
 | `@msg/sdl/sensor/telemetry` | เกตเวย์ → คลาวด์ | **ค่าที่วัดได้** ของโหนดหนึ่งชุด: `lux, r, g, b, c, cct`; `node_id` ระบุว่าเป็นโหนดไหน |
 | `@msg/sdl/sensor/health` | เกตเวย์ → คลาวด์ | **heartbeat/สุขภาพบอร์ด** ของโหนด ทุก 2 วินาที: `uptime_s, heap, reset, temp_c, tx_*` — ไม่มีค่าที่วัดได้ปนมา |
 | `@msg/sdl/gw/state` | เกตเวย์ → คลาวด์ | snapshot ล่าสุดของทุกโหนดและสถานะโคม สำหรับ Dashboard (ทุก 10 วินาที) |
@@ -89,13 +89,27 @@ snapshot บน `@msg/sdl/gw/state`:
 
 ```json
 {"device":"sdl-gateway","ts":1795003828,"n1_lux":412.5,"n1_cct":4300,"n1_up_s":41,
- "n1_heap":233472,"n1_sys_age_s":0,"dist_mm":550,"presence":1,"lamp_mW":3120,
+ "n1_heap":233472,"n1_sys_age_s":0,"dist_mm":385,"dist_ok":1,"tof_ok":1,
+ "presence":1,"presence_src":"pir+tof","lamp_mW":3120,"bus_V":12.04,
+ "current_mA":259,"ina_ok":1,"energy_Wh":1.284,"energy_reading_Wh":0.912,
+ "energy_coding_Wh":0.372,"energy_drawing_Wh":0,"power_reading_mW":3110,
+ "power_coding_mW":2900,"power_drawing_mW":0,
  "diffuser":1,"nd":0,"warm":0,"pwm":180,"safe":0,"mode":"reading",
  "target_lux":500,"target_cct":4000,"ai":0,"buffered":0,"dropped":0,
  "heap":182296,"uptime_s":1541}
 ```
 
 `ts` เป็น epoch วินาทีของเกตเวย์ (0 จนกว่า NTP จะ sync) — ใช้จัดลำดับ/คำนวณอายุข้อมูลได้
+
+`presence` มาจาก PIR **หรือ** VL53L0X (ระยะใกล้กว่า `cfg::kPresenceDistanceMm`): PIR ยืนยันด้วย
+สัญญาณ HIGH ต่อเนื่องและถือค้าง 30 วินาที ส่วนระยะยืนยันสองรอบและถือค้าง 10 วินาที เพื่อไม่ให้มือ
+หรือหนังสือที่ตัดลำแสงทำให้สถานะกระพริบ `presence_src` บอกว่าแหล่งใดเป็นผู้ยืนยัน (`pir`, `tof`,
+`pir+tof`, `none`) `dist_ok=0` หมายถึงยังไม่มีเป้าที่วัดได้ (ค่า `dist_mm` เป็น 0) ไม่ใช่ระยะ 0 mm
+`tof_ok`/`ina_ok` เป็น 0 เมื่อเซนเซอร์ไม่ตอบและกำลังพยายาม re-init — เกตเวย์ลองใหม่ทุก 5 วินาที
+
+`energy_Wh` คือพลังงานสะสมตั้งแต่บูต จาก `lamp_mW` ที่ INA219 อ่านได้ (อินทิเกรตทุก 200 ms)
+แยกตามโหมดใน `energy_<mode>_Wh`; `power_<mode>_mW` เป็นกำลังเฉลี่ยของเวลาที่โหมดนั้นทำงาน
+ค่าทั้งคู่เป็น 0 จนกว่าโหมดนั้นจะได้ทำงาน จึงใช้เป็น metric พลังงานต่อโหมดในรายงานได้
 
 ## เกตเวย์ ↔ AI · HTTPS
 

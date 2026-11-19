@@ -160,6 +160,22 @@ bool publishReading(const app::TelemetryRecord &rec) {
   return mqtt.publish(cfg::kTopicSensorTelemetry, reinterpret_cast<const uint8_t *>(payload), n);
 }
 
+// Which local sensor sees someone, for the dashboard's presence line.
+const char *presenceSourceName(uint8_t src) {
+  const bool pir = (src & app::kPresencePir) != 0;
+  const bool tof = (src & app::kPresenceToF) != 0;
+  if (pir && tof) return "pir+tof";
+  if (pir) return "pir";
+  if (tof) return "tof";
+  return "none";
+}
+
+// Average power over the time that mode was active, from the integrated energy. 0 means
+// "this mode has not run yet", which is honest for a fresh boot.
+float averagePowerMw(float wh, uint32_t ms) {
+  return ms ? wh * 3600000.0f / static_cast<float>(ms) : 0.0f;
+}
+
 // Full snapshot for dashboards, every kStatePeriodMs: what the lamp is doing plus the last
 // value seen from every node. Flat JSON — this used to be a NETPIE shadow document, but on a
 // self-hosted broker there is no shadow store to wrap it in.
@@ -192,10 +208,21 @@ void publishState() {
       }
     }
     d["dist_mm"] = s.local.distOk ? s.local.distMm : 0;
+    d["dist_ok"] = s.local.distOk ? 1 : 0;
+    d["tof_ok"] = s.local.tofOk ? 1 : 0;
     d["presence"] = s.local.presence ? 1 : 0;
+    d["presence_src"] = presenceSourceName(s.local.presenceSrc);
     d["lamp_mW"] = s.local.powerMw;
     d["bus_V"] = s.local.busV;
     d["current_mA"] = s.local.currentMa;
+    d["ina_ok"] = s.local.inaOk ? 1 : 0;
+    d["energy_Wh"] = s.local.energyWh;
+    d["energy_reading_Wh"] = s.local.modeEnergyWh[0];
+    d["energy_coding_Wh"] = s.local.modeEnergyWh[1];
+    d["energy_drawing_Wh"] = s.local.modeEnergyWh[2];
+    d["power_reading_mW"] = averagePowerMw(s.local.modeEnergyWh[0], s.local.modeMs[0]);
+    d["power_coding_mW"] = averagePowerMw(s.local.modeEnergyWh[1], s.local.modeMs[1]);
+    d["power_drawing_mW"] = averagePowerMw(s.local.modeEnergyWh[2], s.local.modeMs[2]);
     d["diffuser"] = s.lamp.filters[0] ? 1 : 0;
     d["nd"] = s.lamp.filters[1] ? 1 : 0;
     d["warm"] = s.lamp.filters[2] ? 1 : 0;
@@ -211,7 +238,7 @@ void publishState() {
   d["heap"] = ESP.getFreeHeap();
   d["uptime_s"] = millis() / 1000;
 
-  char payload[2048];  // kMaxNodes entries with health keys; must stay <= mqtt buffer size
+  char payload[3072];  // kMaxNodes entries with health keys; must stay <= mqtt buffer size
   size_t n = serializeJson(doc, payload, sizeof(payload));
   mqtt.publish(cfg::kTopicState, reinterpret_cast<const uint8_t *>(payload), n);
 }
@@ -263,11 +290,25 @@ void publishGatewayTelemetry() {
     doc["mode"] = app::modeName(app::state.mode);
     doc["safe"] = app::state.lamp.safe ? 1 : 0;
     doc["pwm"] = app::state.lamp.pwm;
+
+    // Live local sensors on the 2 s topic too: presence and power should not wait for the
+    // 10 s state snapshot. The dashboard prefers these when they are newer.
+    const auto &l = app::state.local;
+    doc["dist_mm"] = l.distOk ? l.distMm : 0;
+    doc["dist_ok"] = l.distOk ? 1 : 0;
+    doc["tof_ok"] = l.tofOk ? 1 : 0;
+    doc["presence"] = l.presence ? 1 : 0;
+    doc["presence_src"] = presenceSourceName(l.presenceSrc);
+    doc["lamp_mW"] = l.powerMw;
+    doc["bus_V"] = l.busV;
+    doc["current_mA"] = l.currentMa;
+    doc["ina_ok"] = l.inaOk ? 1 : 0;
+    doc["energy_Wh"] = l.energyWh;
   }
   doc["buffered"] = backlog.size();
   doc["dropped"] = backlog.dropped();
 
-  char payload[512];
+  char payload[768];
   size_t n = serializeJson(doc, payload, sizeof(payload));
   if (!mqtt.publish(cfg::kTopicGwTelemetry, reinterpret_cast<const uint8_t *>(payload), n)) {
     Serial.println("[cloud] gateway telemetry publish failed");
@@ -462,7 +503,7 @@ void task(void *) {
   tls.setHandshakeTimeout(10);
   mqtt.setServer(cfg::kMqttHost, cfg::kMqttPort);
   mqtt.setCallback(onMqttMessage);
-  mqtt.setBufferSize(3072);  // must exceed the largest payload (the gw/state snapshot) plus header
+  mqtt.setBufferSize(4096);  // must exceed the largest payload (the gw/state snapshot) plus header
   mqtt.setKeepAlive(cfg::kMqttKeepAliveSec);
   mqtt.setSocketTimeout(5);
 

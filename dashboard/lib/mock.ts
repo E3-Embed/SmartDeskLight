@@ -33,6 +33,7 @@ interface Sim {
   buffered: number;
   dropped: number;
   powerMw: number;
+  energyWh: number;
   tick: number;
   dirty: boolean;
   lastGatewayAt: number;
@@ -102,6 +103,7 @@ function newSim(): Sim {
     buffered: 0,
     dropped: 0,
     powerMw: 2700,
+    energyWh: 0.42,
     tick: 0,
     dirty: true,
     lastGatewayAt: 0,
@@ -130,10 +132,15 @@ function statePayload(sim: Sim) {
     n1_temp_c: 43.7,
     n1_sys_age_s: sim.scenario === "fault" ? 30 : 1,
     dist_mm: sim.presence ? Math.round(530 + noise(sim, 35)) : 0,
+    dist_ok: sim.presence ? 1 : 0,
+    tof_ok: 1,
     presence: sim.presence ? 1 : 0,
+    presence_src: sim.presence ? "pir+tof" : "none",
     lamp_mW: Math.round(sim.powerMw),
-    bus_V: Number((5.02 + noise(sim, 0.03)).toFixed(2)),
-    current_mA: Math.round(sim.powerMw / 5.02),
+    bus_V: Number((12.04 + noise(sim, 0.03)).toFixed(2)),
+    current_mA: Math.round(sim.powerMw / 12.04),
+    ina_ok: 1,
+    energy_Wh: Number(sim.energyWh.toFixed(3)),
     diffuser: sim.filters[0] ? 1 : 0,
     nd: sim.filters[1] ? 1 : 0,
     warm: sim.filters[2] ? 1 : 0,
@@ -170,6 +177,16 @@ function gatewayPayload(sim: Sim, reset = "poweron") {
     mode: sim.mode,
     safe: sim.safe ? 1 : 0,
     pwm: Math.round(sim.pwm),
+    dist_mm: sim.presence ? Math.round(530 + noise(sim, 35)) : 0,
+    dist_ok: sim.presence ? 1 : 0,
+    tof_ok: 1,
+    presence: sim.presence ? 1 : 0,
+    presence_src: sim.presence ? "pir+tof" : "none",
+    lamp_mW: Math.round(sim.powerMw),
+    bus_V: Number((12.04 + noise(sim, 0.03)).toFixed(2)),
+    current_mA: Math.round(sim.powerMw / 12.04),
+    ina_ok: 1,
+    energy_Wh: Number(sim.energyWh.toFixed(3)),
     buffered: sim.buffered,
     dropped: sim.dropped,
   });
@@ -249,6 +266,7 @@ function advance(sim: Sim) {
   sim.tick += 1;
   sim.uptime += 1;
   sim.seq += 1;
+  sim.energyWh += sim.powerMw / 1000 / 3600;  // one tick is one second
   if (sim.rng() > 0.002) sim.rx += 1;
 
   if (sim.scenario === "fault") {
@@ -402,6 +420,7 @@ export function setMockScenario(next: MockScenario): void {
     sim.uptime = 0;
     sim.rx = 0;
     sim.seq = 0;
+    sim.energyWh = 0;
     sim.safe = false;
     sim.presence = true;
     sim.pwm = 0;

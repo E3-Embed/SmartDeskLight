@@ -361,6 +361,12 @@ export function Dashboard() {
       ok: state?.link === "online" && state?.status !== "offline",
     },
     { label: "ไม่ได้อยู่ในโหมดปลอดภัย", ok: !derived.safe },
+    ...(derived.tofOk == null
+      ? []
+      : [{ label: "VL53L0X ตอบสนอง", ok: derived.tofOk }]),
+    ...(derived.inaOk == null
+      ? []
+      : [{ label: "INA219 ตอบสนอง", ok: derived.inaOk }]),
   ];
 
   const alerts = (className: string, compact = false) => (

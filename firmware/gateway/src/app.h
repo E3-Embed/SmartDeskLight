@@ -54,13 +54,26 @@ struct NodeState {
   int16_t tempCdeg = 0;     // SoC temperature as reported by the node, 0.1 C units
 };
 
+// Which local sensor currently sees someone. Stored as bits so the cloud can say "both".
+enum PresenceSource : uint8_t {
+  kPresencePir = 1u << 0,
+  kPresenceToF = 1u << 1,
+};
+
 struct LocalSensors {
   uint16_t distMm = 0;
-  bool distOk = false;
-  bool presence = false;
+  bool distOk = false;       // last reading was a real target within range
+  bool tofOk = false;        // VL53L0X is initialised and answering
+  bool presence = false;     // fused PIR OR distance, with each sensor's hold time
+  uint8_t presenceSrc = 0;   // PresenceSource bits
   uint32_t lastPresenceMs = 0;
   float busV = 0, currentMa = 0, powerMw = 0;
-  bool inaOk = false;
+  bool inaOk = false;        // INA219 is initialised and the last read succeeded
+  // Energy since boot, integrated from INA219 power. Indexed by app::Mode
+  // (Reading, Coding, Drawing), so the report can quote power per mode.
+  float energyWh = 0;
+  float modeEnergyWh[3] = {0, 0, 0};
+  uint32_t modeMs[3] = {0, 0, 0};
 };
 
 struct LampState {
